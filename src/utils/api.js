@@ -111,6 +111,8 @@ export const api = {
     }),
   readFile: (projectName, filePath) =>
     authenticatedFetch(`/api/projects/${projectName}/file?filePath=${encodeURIComponent(filePath)}`),
+  readFileBlob: (projectName, filePath) =>
+    authenticatedFetch(`/api/projects/${projectName}/files/content?path=${encodeURIComponent(filePath)}`),
   saveFile: (projectName, filePath, content) =>
     authenticatedFetch(`/api/projects/${projectName}/file`, {
       method: 'PUT',
@@ -140,13 +142,6 @@ export const api = {
 
   uploadFiles: (projectName, formData) =>
     authenticatedFetch(`/api/projects/${projectName}/files/upload`, {
-      method: 'POST',
-      body: formData,
-      headers: {}, // Let browser set Content-Type for FormData
-    }),
-
-  transcribe: (formData) =>
-    authenticatedFetch('/api/transcribe', {
       method: 'POST',
       body: formData,
       headers: {}, // Let browser set Content-Type for FormData
