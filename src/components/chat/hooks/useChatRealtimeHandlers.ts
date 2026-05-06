@@ -1,6 +1,8 @@
 import { useEffect, useRef } from 'react';
 import type { Dispatch, MutableRefObject, SetStateAction } from 'react';
-import type { PendingPermissionRequest } from '../types/types';
+
+import { usePaletteOps } from '../../../contexts/PaletteOpsContext';
+import type { PendingPermissionRequest, SessionNavigationOptions } from '../types/types';
 import type { Project, ProjectSession, LLMProvider } from '../../../types/app';
 import type { SessionStore, NormalizedMessage } from '../../../stores/useSessionStore';
 
@@ -66,7 +68,7 @@ interface UseChatRealtimeHandlersArgs {
   onSessionProcessing?: (sessionId?: string | null) => void;
   onSessionNotProcessing?: (sessionId?: string | null) => void;
   onReplaceTemporarySession?: (sessionId?: string | null) => void;
-  onNavigateToSession?: (sessionId: string) => void;
+  onNavigateToSession?: (sessionId: string, options?: SessionNavigationOptions) => void;
   onWebSocketReconnect?: () => void;
   sessionStore: SessionStore;
 }
@@ -99,6 +101,7 @@ export function useChatRealtimeHandlers({
   onWebSocketReconnect,
   sessionStore,
 }: UseChatRealtimeHandlersArgs) {
+  const paletteOps = usePaletteOps();
   const lastProcessedMessageRef = useRef<LatestChatMessage | null>(null);
 
   useEffect(() => {
@@ -271,18 +274,56 @@ export function useChatRealtimeHandlers({
           break;
         }
 
-        // Clear pending session
+        const actualSessionId =
+          typeof msg.actualSessionId === 'string' && msg.actualSessionId.trim().length > 0
+            ? msg.actualSessionId
+            : null;
         const pendingSessionId = sessionStorage.getItem('pendingSessionId');
-        if (pendingSessionId && !currentSessionId && msg.exitCode === 0) {
-          const actualId = msg.actualSessionId || pendingSessionId;
-          setCurrentSessionId(actualId);
-          if (msg.actualSessionId) {
-            onNavigateToSession?.(actualId);
+        const completedSuccessfully = msg.exitCode === undefined || msg.exitCode === 0;
+        const isVisibleSession =
+          Boolean(
+            sid
+            && (
+              sid === activeViewSessionId
+              || sid === pendingSessionId
+              || pendingViewSessionRef.current?.sessionId === sid
+            ),
+          );
+
+        if (actualSessionId && sid && actualSessionId !== sid) {
+          sessionStore.replaceSessionId(sid, actualSessionId);
+
+          if (isVisibleSession) {
+            setCurrentSessionId(actualSessionId);
+
+            if (pendingViewSessionRef.current) {
+              const pendingSession = pendingViewSessionRef.current.sessionId;
+              if (!pendingSession || pendingSession === sid) {
+                pendingViewSessionRef.current.sessionId = actualSessionId;
+              }
+            }
+          }
+
+          if (completedSuccessfully && pendingSessionId === sid) {
+            sessionStorage.removeItem('pendingSessionId');
+          }
+
+          if (isVisibleSession) {
+            onNavigateToSession?.(actualSessionId, { replace: true });
+            setTimeout(() => { void paletteOps.refreshProjects(); }, 500);
+          }
+          break;
+        }
+
+        // Clear pending session
+        if (pendingSessionId && !currentSessionId && completedSuccessfully) {
+          const resolvedSessionId = actualSessionId || pendingSessionId;
+          setCurrentSessionId(resolvedSessionId);
+          if (actualSessionId) {
+            onNavigateToSession?.(resolvedSessionId, { replace: true });
           }
           sessionStorage.removeItem('pendingSessionId');
-          if (window.refreshProjects) {
-            setTimeout(() => window.refreshProjects?.(), 500);
-          }
+          setTimeout(() => { void paletteOps.refreshProjects(); }, 500);
         }
         break;
       }
@@ -365,5 +406,6 @@ export function useChatRealtimeHandlers({
     onNavigateToSession,
     onWebSocketReconnect,
     sessionStore,
+    paletteOps,
   ]);
 }

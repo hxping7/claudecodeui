@@ -43,6 +43,7 @@ function ChatInterface({
   autoScrollToBottom,
   sendByCtrlEnter,
   externalMessageUpdate,
+  newSessionTrigger,
   onShowAllTasks,
 }: ChatInterfaceProps) {
   const { tasksEnabled, isTaskMasterInstalled } = useTasksSettings();
@@ -123,6 +124,7 @@ function ChatInterface({
     sendMessage,
     autoScrollToBottom,
     externalMessageUpdate,
+    newSessionTrigger,
     processingSessions,
     resetStreamingState,
     pendingViewSessionRef,
@@ -212,7 +214,8 @@ function ChatInterface({
     const providerVal = (localStorage.getItem('selected-provider') as LLMProvider) || 'claude';
     await sessionStore.refreshFromServer(selectedSession.id, {
       provider: (selectedSession.__provider || providerVal) as LLMProvider,
-      projectName: selectedProject.name,
+      // Use DB projectId; legacy folder-derived projectName is no longer accepted here.
+      projectId: selectedProject.projectId,
       projectPath: selectedProject.fullPath || selectedProject.path || '',
     });
     setIsLoading(false);
