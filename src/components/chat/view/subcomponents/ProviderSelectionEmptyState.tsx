@@ -3,6 +3,7 @@ import { Check, ChevronDown } from "lucide-react";
 import { Trans, useTranslation } from "react-i18next";
 
 import { useServerPlatform } from "../../../../hooks/useServerPlatform";
+import { useVisibleProviders } from "../../../../hooks/useVisibleProviders";
 import SessionProviderLogo from "../../../llm-logo-provider/SessionProviderLogo";
 import {
   CLAUDE_MODELS,
@@ -110,19 +111,30 @@ export default function ProviderSelectionEmptyState({
 }: ProviderSelectionEmptyStateProps) {
   const { t } = useTranslation("chat");
   const { isWindowsServer } = useServerPlatform();
+  const { visibleProviders: configuredVisibleProviders } = useVisibleProviders();
   const [dialogOpen, setDialogOpen] = useState(false);
 
-  const visibleProviderGroups = useMemo(
+  // Filter by server platform first (Cursor not available on Windows server)
+  const platformFilteredGroups = useMemo(
     () => (isWindowsServer ? PROVIDER_GROUPS.filter((p) => p.id !== "cursor") : PROVIDER_GROUPS),
     [isWindowsServer],
   );
 
+  // Further filter by user configuration
+  const visibleProviderGroups = useMemo(
+    () => platformFilteredGroups.filter((p) => configuredVisibleProviders.includes(p.id as LLMProvider)),
+    [platformFilteredGroups, configuredVisibleProviders],
+  );
+
   useEffect(() => {
-    if (isWindowsServer && provider === "cursor") {
-      setProvider("claude");
-      localStorage.setItem("selected-provider", "claude");
+    // If provider is not visible (due to platform or user config), switch to first visible
+    const isVisible = visibleProviderGroups.some((g) => g.id === provider);
+    if (!isVisible && visibleProviderGroups.length > 0) {
+      const firstVisibleProvider = visibleProviderGroups[0].id as LLMProvider;
+      setProvider(firstVisibleProvider);
+      localStorage.setItem("selected-provider", firstVisibleProvider);
     }
-  }, [isWindowsServer, provider, setProvider]);
+  }, [isWindowsServer, provider, setProvider, visibleProviderGroups]);
 
   const nextTaskPrompt = t("tasks.nextTaskPrompt", {
     defaultValue: "Start the next task",

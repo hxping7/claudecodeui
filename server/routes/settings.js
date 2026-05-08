@@ -1,9 +1,12 @@
 import express from 'express';
-import { apiKeysDb, credentialsDb, notificationPreferencesDb, pushSubscriptionsDb } from '../modules/database/index.js';
+import { apiKeysDb, credentialsDb, notificationPreferencesDb, pushSubscriptionsDb, appConfigDb } from '../modules/database/index.js';
 import { getPublicKey } from '../services/vapid-keys.js';
 import { createNotificationEvent, notifyUserIfEnabled } from '../services/notification-orchestrator.js';
 
 const router = express.Router();
+
+// Default visible providers (all providers enabled by default)
+const DEFAULT_VISIBLE_PROVIDERS = ['claude', 'cursor', 'codex', 'gemini'];
 
 // ===============================
 // API Keys Management
@@ -280,6 +283,51 @@ router.get('/server-env', async (req, res) => {
   } catch (error) {
     console.error('Error reading server environment:', error);
     res.status(500).json({ error: 'Failed to read server environment' });
+  }
+});
+
+// ===============================
+// Visible Providers Configuration
+// ===============================
+
+// Get visible providers configuration
+router.get('/visible-providers', async (req, res) => {
+  try {
+    const configValue = appConfigDb.get('visible_providers');
+    const visibleProviders = configValue ? JSON.parse(configValue) : DEFAULT_VISIBLE_PROVIDERS;
+    res.json({ success: true, visibleProviders });
+  } catch (error) {
+    console.error('Error fetching visible providers:', error);
+    res.status(500).json({ error: 'Failed to fetch visible providers' });
+  }
+});
+
+// Update visible providers configuration
+router.put('/visible-providers', async (req, res) => {
+  try {
+    const { visibleProviders } = req.body;
+
+    if (!Array.isArray(visibleProviders)) {
+      return res.status(400).json({ error: 'visibleProviders must be an array' });
+    }
+
+    // Validate that all providers are valid
+    const validProviders = ['claude', 'cursor', 'codex', 'gemini'];
+    const invalidProviders = visibleProviders.filter(p => !validProviders.includes(p));
+    if (invalidProviders.length > 0) {
+      return res.status(400).json({ error: `Invalid providers: ${invalidProviders.join(', ')}` });
+    }
+
+    // Ensure at least one provider is visible
+    if (visibleProviders.length === 0) {
+      return res.status(400).json({ error: 'At least one provider must be visible' });
+    }
+
+    appConfigDb.set('visible_providers', JSON.stringify(visibleProviders));
+    res.json({ success: true, visibleProviders });
+  } catch (error) {
+    console.error('Error saving visible providers:', error);
+    res.status(500).json({ error: 'Failed to save visible providers' });
   }
 });
 
