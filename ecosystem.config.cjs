@@ -2,7 +2,7 @@ module.exports = {
   apps: [
     {
       name: 'claudecodeui',
-      script: './server/index.js',
+      script: './dist-server/server/index.js',
       instances: 1,
       exec_mode: 'fork',
       env: {
