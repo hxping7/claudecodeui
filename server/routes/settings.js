@@ -742,7 +742,7 @@ router.put('/ui-config', requireAdmin, async (req, res) => {
 
     const newConfig = {
       appName: typeof appName === 'string' ? appName : currentConfig.appName,
-      logoUrl: typeof logoUrl === 'string' ? logoUrl : currentConfig.logoUrl,
+      logoUrl: logoUrl !== undefined ? logoUrl : currentConfig.logoUrl,
       showReportIssue: typeof showReportIssue === 'boolean' ? showReportIssue : currentConfig.showReportIssue,
       showJoinCommunity: typeof showJoinCommunity === 'boolean' ? showJoinCommunity : currentConfig.showJoinCommunity,
       showGitHubStar: typeof showGitHubStar === 'boolean' ? showGitHubStar : currentConfig.showGitHubStar,

@@ -26,7 +26,9 @@
     "userDeleted": "用户删除成功",
     "passwordReset": "密码重置成功",
     "noUsers": "暂无用户",
-    "cancel": "取消"
+    "cancel": "取消",
+    "cannotDisableLastAdmin": "无法禁用最后一个管理员",
+    "cannotDeleteLastAdmin": "无法删除最后一个管理员"
   },
   "sidebar": {
     "backToFrontend": "返回前端",

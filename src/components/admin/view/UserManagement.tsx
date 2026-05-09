@@ -1,11 +1,13 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAdminUsers } from '../../../hooks/useAdmin';
+import { useAuth } from '../../auth/context/AuthContext';
 import { Button } from '../../../shared/view/ui';
 import { Users, UserPlus, Shield, ShieldOff, Trash2, Key } from 'lucide-react';
 
 export default function UserManagement() {
   const { t } = useTranslation('admin');
+  const { user: currentUser } = useAuth();
   const {
     users,
     isLoading,
@@ -16,6 +18,9 @@ export default function UserManagement() {
     resetPassword,
     toggleUser,
   } = useAdminUsers();
+
+  // Count admins to prevent deleting/disabling the last admin
+  const adminCount = useMemo(() => users.filter(u => u.role === 'admin').length, [users]);
 
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showResetModal, setShowResetModal] = useState<number | null>(null);
@@ -155,7 +160,13 @@ export default function UserManagement() {
                       variant="ghost"
                       size="sm"
                       onClick={() => handleToggleUser(user.id, !user.is_active)}
-                      title={user.is_active ? t('users.inactive') : t('users.active')}
+                      title={
+                        user.role === 'admin' && user.is_active && adminCount === 1
+                          ? t('users.cannotDisableLastAdmin', { defaultValue: 'Cannot disable the last admin' })
+                          : (user.is_active ? t('users.inactive') : t('users.active'))
+                      }
+                      disabled={user.role === 'admin' && user.is_active && adminCount === 1}
+                      className={user.role === 'admin' && user.is_active && adminCount === 1 ? 'opacity-50' : ''}
                     >
                       {user.is_active ? (
                         <ShieldOff className="h-4 w-4" />
@@ -167,8 +178,13 @@ export default function UserManagement() {
                       variant="ghost"
                       size="sm"
                       onClick={() => handleDeleteUser(user.id)}
-                      title={t('users.deleteUser')}
-                      className="text-destructive hover:text-destructive"
+                      title={
+                        user.role === 'admin' && adminCount === 1
+                          ? t('users.cannotDeleteLastAdmin', { defaultValue: 'Cannot delete the last admin' })
+                          : t('users.deleteUser')
+                      }
+                      className={`text-destructive hover:text-destructive ${user.role === 'admin' && adminCount === 1 ? 'opacity-50' : ''}`}
+                      disabled={user.role === 'admin' && adminCount === 1}
                     >
                       <Trash2 className="h-4 w-4" />
                     </Button>
