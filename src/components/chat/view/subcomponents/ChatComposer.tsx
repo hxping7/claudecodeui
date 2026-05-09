@@ -13,12 +13,14 @@ import type {
 } from 'react';
 import { ImageIcon, MessageSquareIcon, XIcon, ArrowDownIcon } from 'lucide-react';
 import type { PendingPermissionRequest, PermissionMode, Provider } from '../../types/types';
+import type { LLMProvider } from '../../../types/app';
 import CommandMenu from './CommandMenu';
 import ClaudeStatus from './ClaudeStatus';
 import ImageAttachment from './ImageAttachment';
 import PermissionRequestsBanner from './PermissionRequestsBanner';
 import ThinkingModeSelector from './ThinkingModeSelector';
 import TokenUsagePie from './TokenUsagePie';
+import ModelSelector from './ModelSelector';
 import {
   PromptInput,
   PromptInputHeader,
@@ -101,6 +103,10 @@ interface ChatComposerProps {
   placeholder: string;
   isTextareaExpanded: boolean;
   sendByCtrlEnter?: boolean;
+  // Model selection
+  currentModel: string;
+  onModelChange: (model: string) => void;
+  hasActiveSession?: boolean;
 }
 
 export default function ChatComposer({
@@ -156,6 +162,9 @@ export default function ChatComposer({
   placeholder,
   isTextareaExpanded,
   sendByCtrlEnter,
+  currentModel,
+  onModelChange,
+  hasActiveSession = false,
 }: ChatComposerProps) {
   const { t } = useTranslation('chat');
   const textareaRect = textareaRef.current?.getBoundingClientRect();
@@ -360,6 +369,13 @@ export default function ChatComposer({
             {provider === 'claude' && (
               <ThinkingModeSelector selectedMode={thinkingMode} onModeChange={setThinkingMode} onClose={() => {}} className="" />
             )}
+
+            <ModelSelector
+              provider={provider as LLMProvider}
+              currentModel={currentModel}
+              onModelChange={onModelChange}
+              disabled={hasActiveSession}
+            />
 
             <TokenUsagePie used={tokenBudget?.used || 0} total={tokenBudget?.total || parseInt(import.meta.env.VITE_CONTEXT_WINDOW) || 160000} />
 

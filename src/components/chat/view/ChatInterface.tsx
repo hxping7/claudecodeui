@@ -416,6 +416,31 @@ function ChatInterface({
           })}
           isTextareaExpanded={isTextareaExpanded}
           sendByCtrlEnter={sendByCtrlEnter}
+          currentModel={
+            provider === 'claude'
+              ? claudeModel
+              : provider === 'codex'
+                ? codexModel
+                : provider === 'gemini'
+                  ? geminiModel
+                  : cursorModel
+          }
+          onModelChange={(model) => {
+            if (provider === 'claude') {
+              setClaudeModel(model);
+              localStorage.setItem('claude-model', model);
+            } else if (provider === 'codex') {
+              setCodexModel(model);
+              localStorage.setItem('codex-model', model);
+            } else if (provider === 'gemini') {
+              setGeminiModel(model);
+              localStorage.setItem('gemini-model', model);
+            } else {
+              setCursorModel(model);
+              localStorage.setItem('cursor-model', model);
+            }
+          }}
+          hasActiveSession={isLoading || Boolean(claudeStatus?.can_interrupt)}
         />
       </div>
 
