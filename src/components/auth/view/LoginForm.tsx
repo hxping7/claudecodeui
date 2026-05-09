@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react';
 import type { FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../context/AuthContext';
+import { useUIConfig } from '../../../contexts/UIConfigContext';
 import AuthErrorAlert from './AuthErrorAlert';
 import AuthInputField from './AuthInputField';
 import AuthScreenLayout from './AuthScreenLayout';
@@ -24,10 +25,13 @@ const initialState: LoginFormState = {
 export default function LoginForm() {
   const { t } = useTranslation('auth');
   const { login } = useAuth();
+  const { config: uiConfig } = useUIConfig();
 
   const [formState, setFormState] = useState<LoginFormState>(initialState);
   const [errorMessage, setErrorMessage] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const appName = uiConfig.appName || 'CloudCLI';
 
   const updateField = useCallback((field: keyof LoginFormState, value: string) => {
     setFormState((previous) => ({ ...previous, [field]: value }));
@@ -57,8 +61,8 @@ export default function LoginForm() {
   return (
     <AuthScreenLayout
       title={t('login.title')}
-      description={t('login.description')}
-      footerText="Enter your credentials to access CloudCLI"
+      description={t('login.description', { appName })}
+      footerText={t('login.footer')}
     >
       <form onSubmit={handleSubmit} className="space-y-4">
         <AuthInputField

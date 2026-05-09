@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { MessageSquare } from 'lucide-react';
 import { IS_PLATFORM } from '../../../constants/config';
+import { useUIConfig } from '../../../contexts/UIConfigContext';
 
 type AuthScreenLayoutProps = {
   title: string;
@@ -17,6 +18,8 @@ export default function AuthScreenLayout({
   footerText,
   logo,
 }: AuthScreenLayoutProps) {
+  const { config: uiConfig } = useUIConfig();
+
   return (
     <div className="flex min-h-screen items-center justify-center bg-background p-4">
       <div className="w-full max-w-md">
@@ -24,8 +27,12 @@ export default function AuthScreenLayout({
           <div className="text-center">
             <div className="mb-4 flex justify-center">
               {logo ?? (
-                <div className="flex h-16 w-16 items-center justify-center rounded-lg bg-primary shadow-sm">
-                  <MessageSquare className="h-8 w-8 text-primary-foreground" />
+                <div className="flex h-16 w-16 items-center justify-center rounded-lg bg-primary shadow-sm overflow-hidden">
+                  {uiConfig.logoUrl ? (
+                    <img src={uiConfig.logoUrl} alt="Logo" className="h-full w-full object-contain" />
+                  ) : (
+                    <MessageSquare className="h-8 w-8 text-primary-foreground" />
+                  )}
                 </div>
               )}
             </div>
@@ -50,7 +57,7 @@ export default function AuthScreenLayout({
                 rel="noopener noreferrer"
                 className="text-xs text-muted-foreground/50 transition-colors hover:text-muted-foreground"
               >
-                CloudCLI is open source
+                {uiConfig.appName || 'CloudCLI'} is open source
               </a>
             </div>
           )}
