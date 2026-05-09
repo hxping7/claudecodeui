@@ -25,7 +25,7 @@ export interface UIConfig {
 
 const defaultConfig: UIConfig = {
   appName: 'CloudCLI',
-  logoUrl: null,
+  logoUrl: '/logo1_64.png',
   showReportIssue: true,
   showJoinCommunity: true,
   showGitHubStar: true,
