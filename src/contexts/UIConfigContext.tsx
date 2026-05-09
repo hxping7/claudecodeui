@@ -1,5 +1,7 @@
-import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, ReactNode, useRef } from 'react';
 import { api } from '../utils/api';
+import { useAuth } from '../components/auth/context/AuthContext';
+import { IS_PLATFORM } from '../constants/config';
 
 export interface UIConfig {
   appName: string;
@@ -58,9 +60,12 @@ export const useUIConfig = () => {
 export const UIConfigProvider = ({ children }: { children: ReactNode }) => {
   const [config, setConfig] = useState<UIConfig>(defaultConfig);
   const [isLoading, setIsLoading] = useState(true);
+  const { token } = useAuth();
+  const previousTokenRef = useRef<string | null | undefined>(undefined);
 
   const refreshConfig = useCallback(async () => {
     try {
+      setIsLoading(true);
       const response = await api.get('/settings/ui-config');
       const data = await response.json();
       const config = data?.config || defaultConfig;
@@ -77,8 +82,23 @@ export const UIConfigProvider = ({ children }: { children: ReactNode }) => {
   }, []);
 
   useEffect(() => {
-    refreshConfig();
-  }, [refreshConfig]);
+    // In OSS mode: load config immediately on mount
+    // In Platform mode: load config when user logs in (token changes from null to a value)
+    if (!IS_PLATFORM) {
+      // OSS mode: always load on mount and when token changes
+      const tokenChanged = previousTokenRef.current !== token;
+      if (tokenChanged) {
+        previousTokenRef.current = token;
+        refreshConfig();
+      }
+    } else {
+      // Platform mode: only load when logged in
+      if (token !== null && previousTokenRef.current !== token) {
+        previousTokenRef.current = token;
+        refreshConfig();
+      }
+    }
+  }, [refreshConfig, token]);
 
   useEffect(() => {
     // Listen for config changes from admin panel
