@@ -1,6 +1,6 @@
 import fsp from 'node:fs/promises';
 
-import { sessionsDb } from '@/modules/database/index.js';
+import { projectsDb, sessionsDb } from '@/modules/database/index.js';
 import { providerRegistry } from '@/modules/providers/provider.registry.js';
 import type {
   FetchHistoryOptions,
@@ -70,11 +70,20 @@ export const sessionsService = {
       });
     }
 
+    // Look up project_path from projects table using project_id
+    let projectPath = '';
+    if (session.project_id) {
+      const project = projectsDb.getProjectById(session.project_id);
+      if (project) {
+        projectPath = project.project_path;
+      }
+    }
+
     const provider = session.provider as LLMProvider;
     return providerRegistry.resolveProvider(provider).sessions.fetchHistory(sessionId, {
       limit: options.limit ?? null,
       offset: options.offset ?? 0,
-      projectPath: session.project_path ?? '',
+      projectPath,
     });
   },
 

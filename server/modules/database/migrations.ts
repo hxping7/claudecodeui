@@ -1,12 +1,14 @@
 import { Database } from 'better-sqlite3';
 
 import {
+  AGENT_CONFIG_TABLE_SCHEMA_SQL,
   APP_CONFIG_TABLE_SCHEMA_SQL,
   LAST_SCANNED_AT_SQL,
   PROJECTS_TABLE_SCHEMA_SQL,
   PUSH_SUBSCRIPTIONS_TABLE_SCHEMA_SQL,
   SESSIONS_TABLE_SCHEMA_SQL,
   USER_NOTIFICATION_PREFERENCES_TABLE_SCHEMA_SQL,
+  USER_AGENT_CONFIG_TABLE_SCHEMA_SQL,
   VAPID_KEYS_TABLE_SCHEMA_SQL,
 } from '@/modules/database/schema.js';
 
@@ -88,6 +90,7 @@ const migrateLegacyWorkspaceTableIntoProjects = (db: Database): void => {
   }
 
   console.log('Running migration: Migrating workspace_original_paths data into projects');
+  // For each workspace path, insert only if no project exists for that path
   db.exec(`
     INSERT INTO projects (project_id, project_path, custom_project_name, isStarred, isArchived)
     SELECT
@@ -102,9 +105,7 @@ const migrateLegacyWorkspaceTableIntoProjects = (db: Database): void => {
       0
     FROM workspace_original_paths
     WHERE workspace_path IS NOT NULL AND trim(workspace_path) <> ''
-    ON CONFLICT(project_path) DO UPDATE SET
-      custom_project_name = COALESCE(projects.custom_project_name, excluded.custom_project_name),
-      isStarred = COALESCE(projects.isStarred, excluded.isStarred)
+      AND workspace_path NOT IN (SELECT project_path FROM projects WHERE project_path IS NOT NULL)
   `);
 };
 
@@ -249,6 +250,18 @@ const rebuildSessionsTableWithProjectSchema = (db: Database): void => {
     .sort((a, b) => a.pk - b.pk)
     .map((column) => column.name);
 
+  // If sessions already has project_id, it has been migrated to the new schema
+  // The migrateToMultipleProjectsPerDirectory function handles this case
+  if (columnNames.includes('project_id')) {
+    addColumnToTableIfNotExists(db, 'sessions', columnNames, 'jsonl_path', 'TEXT');
+    addColumnToTableIfNotExists(db, 'sessions', columnNames, 'created_at', 'DATETIME');
+    addColumnToTableIfNotExists(db, 'sessions', columnNames, 'updated_at', 'DATETIME');
+    addColumnToTableIfNotExists(db, 'sessions', columnNames, 'user_id', 'INTEGER REFERENCES users(id) ON DELETE CASCADE');
+    db.exec('UPDATE sessions SET created_at = COALESCE(created_at, CURRENT_TIMESTAMP)');
+    db.exec('UPDATE sessions SET updated_at = COALESCE(updated_at, CURRENT_TIMESTAMP)');
+    return;
+  }
+
   const shouldRebuild =
     !columnNames.includes('project_path') ||
     primaryKeyColumns.length !== 1 ||
@@ -376,8 +389,19 @@ const ensureProjectsForSessionPaths = (db: Database): void => {
     return;
   }
 
+  // Check if sessions table still has project_path column (legacy schema)
+  const sessionsTableInfo = db.prepare('PRAGMA table_info(sessions)').all() as { name: string }[];
+  const sessionsColumnNames = sessionsTableInfo.map((col) => col.name);
+
+  if (!sessionsColumnNames.includes('project_path')) {
+    // Sessions table has already been migrated to use project_id
+    return;
+  }
+
+  // Insert projects for sessions that don't have one yet
+  // Use INSERT OR IGNORE to handle duplicate project_path (now allowed)
   db.exec(`
-    INSERT INTO projects (project_id, project_path, custom_project_name, isStarred, isArchived)
+    INSERT OR IGNORE INTO projects (project_id, project_path, custom_project_name, isStarred, isArchived)
     SELECT
       ${SQLITE_UUID_SQL},
       project_path,
@@ -386,8 +410,150 @@ const ensureProjectsForSessionPaths = (db: Database): void => {
       0
     FROM sessions
     WHERE project_path IS NOT NULL AND trim(project_path) <> ''
-    ON CONFLICT(project_path) DO NOTHING
+      AND project_path NOT IN (SELECT project_path FROM projects WHERE project_path IS NOT NULL)
   `);
+};
+
+const migrateExistingDataToFirstAdmin = (db: Database): void => {
+  // Get the first admin user (or the first user if no admin exists)
+  const adminUser = db
+    .prepare("SELECT id FROM users WHERE role = 'admin' LIMIT 1")
+    .get() as { id: number } | undefined;
+
+  const firstUser = db
+    .prepare('SELECT id FROM users ORDER BY id ASC LIMIT 1')
+    .get() as { id: number } | undefined;
+
+  const targetUserId = adminUser?.id ?? firstUser?.id;
+
+  if (!targetUserId) {
+    console.log('No users found for data migration');
+    return;
+  }
+
+  // If no admin exists, promote the first user to admin
+  if (!adminUser && firstUser) {
+    console.log('Running migration: Promoting first user to admin');
+    db.prepare("UPDATE users SET role = 'admin' WHERE id = ?").run(firstUser.id);
+  }
+
+  // Migrate existing sessions to the target user
+  const sessionsUpdated = db
+    .prepare('UPDATE sessions SET user_id = ? WHERE user_id IS NULL')
+    .run(targetUserId);
+  if (sessionsUpdated.changes > 0) {
+    console.log(`Running migration: Migrated ${sessionsUpdated.changes} sessions to user ${targetUserId}`);
+  }
+
+  // Migrate existing projects to the target user
+  const projectsUpdated = db
+    .prepare('UPDATE projects SET user_id = ? WHERE user_id IS NULL')
+    .run(targetUserId);
+  if (projectsUpdated.changes > 0) {
+    console.log(`Running migration: Migrated ${projectsUpdated.changes} projects to user ${targetUserId}`);
+  }
+};
+
+/**
+ * Migration to allow multiple projects per directory
+ * - Removes UNIQUE constraint from project_path
+ * - Adds project_id to sessions table
+ */
+const migrateToMultipleProjectsPerDirectory = (db: Database): void => {
+  // Check if sessions table has project_id column
+  const sessionsTableInfo = db.prepare('PRAGMA table_info(sessions)').all() as { name: string }[];
+  const sessionsColumnNames = sessionsTableInfo.map((col) => col.name);
+
+  if (!sessionsColumnNames.includes('project_id')) {
+    console.log('Running migration: Adding project_id to sessions table');
+
+    // Rebuild sessions table with project_id instead of project_path
+    db.exec('PRAGMA foreign_keys = OFF');
+
+    try {
+      db.exec('BEGIN TRANSACTION');
+
+      // Create new sessions table
+      db.exec(`
+        CREATE TABLE sessions_new (
+          session_id TEXT NOT NULL,
+          provider TEXT NOT NULL DEFAULT 'claude',
+          custom_name TEXT,
+          project_id TEXT,
+          jsonl_path TEXT,
+          user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          PRIMARY KEY (session_id)
+        )
+      `);
+
+      // Copy data, mapping project_path to project_id
+      db.exec(`
+        INSERT INTO sessions_new (session_id, provider, custom_name, project_id, jsonl_path, user_id, created_at, updated_at)
+        SELECT s.session_id, s.provider, s.custom_name, p.project_id, s.jsonl_path, s.user_id, s.created_at, s.updated_at
+        FROM sessions s
+        LEFT JOIN projects p ON s.project_path = p.project_path
+      `);
+
+      // Drop old table and rename
+      db.exec('DROP TABLE sessions');
+      db.exec('ALTER TABLE sessions_new RENAME TO sessions');
+
+      db.exec('COMMIT');
+      console.log('Migration completed: sessions now uses project_id');
+    } catch (error) {
+      db.exec('ROLLBACK');
+      throw error;
+    } finally {
+      db.exec('PRAGMA foreign_keys = ON');
+    }
+
+    // Create index
+    db.exec('CREATE INDEX IF NOT EXISTS idx_sessions_project_id ON sessions(project_id)');
+  }
+
+  // Check if projects table still has UNIQUE on project_path
+  const projectsSql = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='projects'").get() as { sql: string } | undefined;
+
+  if (projectsSql?.sql?.includes('project_path TEXT NOT NULL UNIQUE')) {
+    console.log('Running migration: Removing UNIQUE constraint from project_path');
+
+    db.exec('PRAGMA foreign_keys = OFF');
+
+    try {
+      db.exec('BEGIN TRANSACTION');
+
+      // Create new projects table without UNIQUE on project_path
+      db.exec(`
+        CREATE TABLE projects_new (
+          project_id TEXT PRIMARY KEY NOT NULL,
+          project_path TEXT NOT NULL,
+          custom_project_name TEXT DEFAULT NULL,
+          isStarred BOOLEAN DEFAULT 0,
+          isArchived BOOLEAN DEFAULT 0,
+          user_id INTEGER REFERENCES users(id) ON DELETE CASCADE
+        )
+      `);
+
+      // Copy data
+      db.exec(`
+        INSERT INTO projects_new SELECT * FROM projects
+      `);
+
+      // Drop old table and rename
+      db.exec('DROP TABLE projects');
+      db.exec('ALTER TABLE projects_new RENAME TO projects');
+
+      db.exec('COMMIT');
+      console.log('Migration completed: project_path UNIQUE constraint removed');
+    } catch (error) {
+      db.exec('ROLLBACK');
+      throw error;
+    } finally {
+      db.exec('PRAGMA foreign_keys = ON');
+    }
+  }
 };
 
 export const runMigrations = (db: Database) => {
@@ -404,6 +570,14 @@ export const runMigrations = (db: Database) => {
       'has_completed_onboarding',
       'BOOLEAN DEFAULT 0'
     );
+    addColumnToTableIfNotExists(
+      db,
+      'users',
+      userColumnNames,
+      'role',
+      "TEXT DEFAULT 'user' CHECK(role IN ('admin', 'user'))"
+    );
+    db.exec('CREATE INDEX IF NOT EXISTS idx_users_role ON users(role)');
 
     db.exec(APP_CONFIG_TABLE_SCHEMA_SQL);
     db.exec(USER_NOTIFICATION_PREFERENCES_TABLE_SCHEMA_SQL);
@@ -420,9 +594,49 @@ export const runMigrations = (db: Database) => {
     ensureProjectsForSessionPaths(db);
 
     db.exec('CREATE INDEX IF NOT EXISTS idx_session_ids_lookup ON sessions(session_id)');
-    db.exec('CREATE INDEX IF NOT EXISTS idx_sessions_project_path ON sessions(project_path)');
+    // Index on project_path only if column exists (legacy schema)
+    // After migrateToMultipleProjectsPerDirectory, sessions uses project_id instead
+    const sessionsInfoForIndex = db.prepare('PRAGMA table_info(sessions)').all() as { name: string }[];
+    const sessionsColumnsForIndex = sessionsInfoForIndex.map((col) => col.name);
+    if (sessionsColumnsForIndex.includes('project_path')) {
+      db.exec('CREATE INDEX IF NOT EXISTS idx_sessions_project_path ON sessions(project_path)');
+    }
     db.exec('CREATE INDEX IF NOT EXISTS idx_projects_is_starred ON projects(isStarred)');
     db.exec('CREATE INDEX IF NOT EXISTS idx_projects_is_archived ON projects(isArchived)');
+
+    // Multi-tenant migrations: Add user_id to sessions and projects tables
+    const sessionsTableInfo = db.prepare('PRAGMA table_info(sessions)').all() as { name: string }[];
+    const sessionsColumnNames = sessionsTableInfo.map((column) => column.name);
+    addColumnToTableIfNotExists(
+      db,
+      'sessions',
+      sessionsColumnNames,
+      'user_id',
+      'INTEGER REFERENCES users(id) ON DELETE CASCADE'
+    );
+    db.exec('CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id)');
+
+    const projectsTableInfo = db.prepare('PRAGMA table_info(projects)').all() as { name: string }[];
+    const projectsColumnNames = projectsTableInfo.map((column) => column.name);
+    addColumnToTableIfNotExists(
+      db,
+      'projects',
+      projectsColumnNames,
+      'user_id',
+      'INTEGER REFERENCES users(id) ON DELETE CASCADE'
+    );
+    db.exec('CREATE INDEX IF NOT EXISTS idx_projects_user_id ON projects(user_id)');
+
+    // Agent config table
+    db.exec(AGENT_CONFIG_TABLE_SCHEMA_SQL);
+
+    // User agent config table (per-user configuration)
+    db.exec(USER_AGENT_CONFIG_TABLE_SCHEMA_SQL);
+
+    // Migration: Allow multiple projects per directory
+    // 1. Remove UNIQUE constraint from project_path
+    // 2. Add project_id to sessions table
+    migrateToMultipleProjectsPerDirectory(db);
 
     db.exec('DROP INDEX IF EXISTS idx_session_names_lookup');
     db.exec('DROP INDEX IF EXISTS idx_sessions_workspace_path');
@@ -435,6 +649,10 @@ export const runMigrations = (db: Database) => {
     }
 
     db.exec(LAST_SCANNED_AT_SQL);
+
+    // Migrate existing data to first admin user
+    migrateExistingDataToFirstAdmin(db);
+
     console.log('Database migrations completed successfully');
   } catch (error: any) {
     console.error('Error running migrations:', error.message);

@@ -4,6 +4,7 @@ import { McpServers } from '../../../../../mcp';
 
 import AccountContent from './content/AccountContent';
 import PermissionsContent from './content/PermissionsContent';
+import UserAgentConfigContent from './content/UserAgentConfigContent';
 
 export default function AgentCategoryContentSection({
   selectedAgent,
@@ -83,6 +84,10 @@ export default function AgentCategoryContentSection({
             path: project.path,
           }))}
         />
+      )}
+
+      {selectedCategory === 'config' && (
+        <UserAgentConfigContent agent={selectedAgent} />
       )}
     </div>
   );

@@ -307,8 +307,11 @@ export class GeminiSessionSynchronizer implements IProviderSessionSynchronizer {
     }
 
     for (const session of sessionsDb.getAllSessions()) {
-      if (session.provider === this.provider && typeof session.project_path === 'string' && session.project_path.trim()) {
-        knownPaths.add(session.project_path.trim());
+      if (session.provider === this.provider && session.project_id) {
+        const project = projectsDb.getProjectById(session.project_id);
+        if (project && typeof project.project_path === 'string' && project.project_path.trim()) {
+          knownPaths.add(project.project_path.trim());
+        }
       }
     }
 

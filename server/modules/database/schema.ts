@@ -8,7 +8,8 @@ CREATE TABLE IF NOT EXISTS users (
     is_active BOOLEAN DEFAULT 1,
     git_name TEXT,
     git_email TEXT,
-    has_completed_onboarding BOOLEAN DEFAULT 0
+    has_completed_onboarding BOOLEAN DEFAULT 0,
+    role TEXT DEFAULT 'user' CHECK(role IN ('admin', 'user'))
 );
 `;
 
@@ -72,11 +73,13 @@ CREATE TABLE IF NOT EXISTS push_subscriptions (
 export const PROJECTS_TABLE_SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS projects (
     project_id TEXT PRIMARY KEY NOT NULL,
-    project_path TEXT NOT NULL UNIQUE,
+    project_path TEXT NOT NULL,
     custom_project_name TEXT DEFAULT NULL,
     isStarred BOOLEAN DEFAULT 0,
-    isArchived BOOLEAN DEFAULT 0
+    isArchived BOOLEAN DEFAULT 0,
+    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE
 );
+-- Note: Removed UNIQUE constraint from project_path to allow multiple projects per directory
 `;
 
 export const SESSIONS_TABLE_SCHEMA_SQL = `
@@ -84,12 +87,13 @@ CREATE TABLE IF NOT EXISTS sessions (
     session_id TEXT NOT NULL,
     provider TEXT NOT NULL DEFAULT 'claude',
     custom_name TEXT,
-    project_path TEXT,
+    project_id TEXT,
     jsonl_path TEXT,
+    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (session_id),
-    FOREIGN KEY (project_path) REFERENCES projects(project_path)
+    FOREIGN KEY (project_id) REFERENCES projects(project_id)
     ON DELETE SET NULL
     ON UPDATE CASCADE
 );
@@ -110,6 +114,55 @@ CREATE TABLE IF NOT EXISTS app_config (
 );
 `;
 
+export const AGENT_CONFIG_TABLE_SCHEMA_SQL = `
+CREATE TABLE IF NOT EXISTS agent_config (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    -- Claude (Anthropic)
+    anthropic_base_url TEXT,
+    anthropic_api_key_encrypted TEXT,
+    -- OpenAI (Codex)
+    openai_base_url TEXT,
+    openai_api_key_encrypted TEXT,
+    -- Google Gemini
+    gemini_base_url TEXT,
+    gemini_api_key_encrypted TEXT,
+    -- Cursor
+    cursor_base_url TEXT,
+    cursor_api_key_encrypted TEXT,
+    -- Metadata
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_by INTEGER REFERENCES users(id)
+);
+`;
+
+// User-level agent configuration (each user can configure their own providers)
+export const USER_AGENT_CONFIG_TABLE_SCHEMA_SQL = `
+CREATE TABLE IF NOT EXISTS user_agent_config (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL UNIQUE,
+    -- Claude (Anthropic)
+    anthropic_base_url TEXT,
+    anthropic_api_key_encrypted TEXT,
+    anthropic_default_model TEXT,
+    -- OpenAI (Codex)
+    openai_base_url TEXT,
+    openai_api_key_encrypted TEXT,
+    openai_default_model TEXT,
+    -- Google Gemini
+    gemini_base_url TEXT,
+    gemini_api_key_encrypted TEXT,
+    gemini_default_model TEXT,
+    -- Cursor
+    cursor_base_url TEXT,
+    cursor_api_key_encrypted TEXT,
+    cursor_default_model TEXT,
+    -- Metadata
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+`;
+
 export const INIT_SCHEMA_SQL = `
 -- Initialize authentication database
 PRAGMA foreign_keys = ON;
@@ -118,6 +171,7 @@ ${USER_TABLE_SCHEMA_SQL}
 -- Indexes for performance for user lookups
 CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
 CREATE INDEX IF NOT EXISTS idx_users_active ON users(is_active);
+-- Note: idx_users_role is created in migrations.ts after ensuring the role column exists
 
 ${API_KEYS_TABLE_SCHEMA_SQL}
 CREATE INDEX IF NOT EXISTS idx_api_keys_key ON api_keys(api_key);
@@ -149,4 +203,8 @@ CREATE INDEX IF NOT EXISTS idx_session_ids_lookup ON sessions(session_id);
 ${LAST_SCANNED_AT_SQL}
 
 ${APP_CONFIG_TABLE_SCHEMA_SQL}
+
+${AGENT_CONFIG_TABLE_SCHEMA_SQL}
+
+${USER_AGENT_CONFIG_TABLE_SCHEMA_SQL}
 `;

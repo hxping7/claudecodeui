@@ -65,12 +65,18 @@ import userRoutes from './routes/user.js';
 import geminiRoutes from './routes/gemini.js';
 import pluginsRoutes from './routes/plugins.js';
 import providerRoutes from './modules/providers/provider.routes.js';
+import adminRoutes from './routes/admin.js';
 import { startEnabledPluginServers, stopAllPlugins, getPluginPort } from './utils/plugin-process-manager.js';
 import { initializeDatabase, projectsDb } from './modules/database/index.js';
 import { configureWebPush } from './services/vapid-keys.js';
 import { validateApiKey, authenticateToken, authenticateWebSocket } from './middleware/auth.js';
 import { IS_PLATFORM } from './constants/config.js';
 import { c } from './utils/colors.js';
+
+// Helper to verify project ownership for user isolation
+function getProjectPathForUser(projectId, userId) {
+    return projectsDb.getProjectPathByIdAndUserId(userId, projectId);
+}
 
 const __dirname = getModuleDir(import.meta.url);
 // The server source runs from /server, while the compiled output runs from /dist-server/server.
@@ -184,6 +190,9 @@ app.use('/api/plugins', authenticateToken, pluginsRoutes);
 
 // Unified provider MCP routes (protected)
 app.use('/api/providers', authenticateToken, providerRoutes);
+
+// Admin API Routes (protected, admin only)
+app.use('/api/admin', authenticateToken, adminRoutes);
 
 // Agent API Routes (uses API key authentication)
 app.use('/api/agent', agentRoutes);
@@ -431,9 +440,10 @@ app.get('/api/projects/:projectId/file', authenticateToken, async (req, res) => 
 
         // Resolve the absolute project root via the DB-backed helper; the
         // caller passes the DB-assigned `projectId`, not a folder name.
-        const projectRoot = await projectsDb.getProjectPathById(projectId);
+        // Verify user owns this project for isolation
+        const projectRoot = await getProjectPathForUser(projectId, req.user.id);
         if (!projectRoot) {
-            return res.status(404).json({ error: 'Project not found' });
+            return res.status(404).json({ error: 'Project not found or access denied' });
         }
 
         // Handle both absolute and relative paths
@@ -472,9 +482,10 @@ app.get('/api/projects/:projectId/files/content', authenticateToken, async (req,
         }
 
         // Projects are now addressed by DB `projectId`, resolved to their path here.
-        const projectRoot = await projectsDb.getProjectPathById(projectId);
+        // Verify user owns this project for isolation
+        const projectRoot = getProjectPathForUser(projectId, req.user.id);
         if (!projectRoot) {
-            return res.status(404).json({ error: 'Project not found' });
+            return res.status(404).json({ error: 'Project not found or access denied' });
         }
 
         // Match the text reader endpoint so callers can pass either project-relative
@@ -534,9 +545,10 @@ app.put('/api/projects/:projectId/file', authenticateToken, async (req, res) => 
         }
 
         // Projects are now addressed by DB `projectId`, resolved to their path here.
-        const projectRoot = await projectsDb.getProjectPathById(projectId);
+        // Verify user owns this project for isolation
+        const projectRoot = getProjectPathForUser(projectId, req.user.id);
         if (!projectRoot) {
-            return res.status(404).json({ error: 'Project not found' });
+            return res.status(404).json({ error: 'Project not found or access denied' });
         }
 
         // Handle both absolute and relative paths
@@ -575,9 +587,10 @@ app.get('/api/projects/:projectId/files', authenticateToken, async (req, res) =>
 
         // Resolve the project's absolute path through the DB (projectId is the
         // primary key of the `projects` table after the identifier migration).
-        const actualPath = await projectsDb.getProjectPathById(req.params.projectId);
+        // Verify user owns this project for isolation
+        const actualPath = getProjectPathForUser(req.params.projectId, req.user.id);
         if (!actualPath) {
-            return res.status(404).json({ error: 'Project not found' });
+            return res.status(404).json({ error: 'Project not found or access denied' });
         }
 
         // Check if path exists
@@ -663,9 +676,10 @@ app.post('/api/projects/:projectId/files/create', authenticateToken, async (req,
         }
 
         // Resolve the project directory through the DB using the new projectId.
-        const projectRoot = await projectsDb.getProjectPathById(projectId);
+        // Verify user owns this project for isolation
+        const projectRoot = getProjectPathForUser(projectId, req.user.id);
         if (!projectRoot) {
-            return res.status(404).json({ error: 'Project not found' });
+            return res.status(404).json({ error: 'Project not found or access denied' });
         }
 
         // Build and validate target path
@@ -736,9 +750,10 @@ app.put('/api/projects/:projectId/files/rename', authenticateToken, async (req, 
         }
 
         // Resolve the project directory through the DB using the new projectId.
-        const projectRoot = await projectsDb.getProjectPathById(projectId);
+        // Verify user owns this project for isolation
+        const projectRoot = getProjectPathForUser(projectId, req.user.id);
         if (!projectRoot) {
-            return res.status(404).json({ error: 'Project not found' });
+            return res.status(404).json({ error: 'Project not found or access denied' });
         }
 
         // Validate old path
@@ -808,9 +823,10 @@ app.delete('/api/projects/:projectId/files', authenticateToken, async (req, res)
         }
 
         // Resolve the project directory through the DB using the new projectId.
-        const projectRoot = await projectsDb.getProjectPathById(projectId);
+        // Verify user owns this project for isolation
+        const projectRoot = getProjectPathForUser(projectId, req.user.id);
         if (!projectRoot) {
-            return res.status(404).json({ error: 'Project not found' });
+            return res.status(404).json({ error: 'Project not found or access denied' });
         }
 
         // Validate path
@@ -926,9 +942,10 @@ const uploadFilesHandler = async (req, res) => {
             }
 
             // Resolve the project directory through the DB using the new projectId.
-            const projectRoot = await projectsDb.getProjectPathById(projectId);
+            // Verify user owns this project for isolation
+            const projectRoot = getProjectPathForUser(projectId, req.user.id);
             if (!projectRoot) {
-                return res.status(404).json({ error: 'Project not found' });
+                return res.status(404).json({ error: 'Project not found or access denied' });
             }
 
             console.log('[DEBUG] Project root:', projectRoot);
@@ -1224,9 +1241,10 @@ app.get('/api/projects/:projectId/sessions/:sessionId/token-usage', authenticate
         // `projectId`. Legacy code here called extractProjectDirectory with a
         // folder-encoded project name; the migration centralizes that lookup
         // in the projects table.
-        const projectPath = await projectsDb.getProjectPathById(projectId);
+        // Verify user owns this project for isolation
+        const projectPath = getProjectPathForUser(projectId, req.user.id);
         if (!projectPath) {
-            return res.status(404).json({ error: 'Project not found' });
+            return res.status(404).json({ error: 'Project not found or access denied' });
         }
 
         // Construct the JSONL file path

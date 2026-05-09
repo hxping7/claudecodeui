@@ -1,6 +1,7 @@
 import { Star, X } from 'lucide-react';
 import { useGitHubStars } from '../../../../hooks/useGitHubStars';
 import { IS_PLATFORM } from '../../../../constants/config';
+import { useUIConfig } from '../../../../contexts/UIConfigContext';
 
 const GITHUB_REPO_URL = 'https://github.com/siteboon/claudecodeui';
 
@@ -14,8 +15,9 @@ function GitHubIcon({ className }: { className?: string }) {
 
 export default function GitHubStarBadge() {
   const { formattedCount, isDismissed, dismiss } = useGitHubStars('siteboon', 'claudecodeui');
+  const { config: uiConfig } = useUIConfig();
 
-  if (IS_PLATFORM || isDismissed) return null;
+  if (IS_PLATFORM || isDismissed || !uiConfig.showGitHubStar) return null;
 
   return (
     <div className="group/star relative hidden md:block">

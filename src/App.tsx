@@ -6,7 +6,10 @@ import { TaskMasterProvider } from './contexts/TaskMasterContext';
 import { TasksSettingsProvider } from './contexts/TasksSettingsContext';
 import { WebSocketProvider } from './contexts/WebSocketContext';
 import { PluginsProvider } from './contexts/PluginsContext';
+import { UIConfigProvider } from './contexts/UIConfigContext';
 import AppContent from './components/app/AppContent';
+import AdminPanel from './components/admin/view/AdminPanel';
+import AdminRoute from './routes/AdminRoute';
 import i18n from './i18n/config.js';
 
 export default function App() {
@@ -18,14 +21,24 @@ export default function App() {
             <PluginsProvider>
               <TasksSettingsProvider>
                 <TaskMasterProvider>
-                <ProtectedRoute>
-                  <Router basename={window.__ROUTER_BASENAME__ || ''}>
-                    <Routes>
-                      <Route path="/" element={<AppContent />} />
-                      <Route path="/session/:sessionId" element={<AppContent />} />
-                    </Routes>
-                  </Router>
-                </ProtectedRoute>
+                  <UIConfigProvider>
+                    <ProtectedRoute>
+                      <Router basename={window.__ROUTER_BASENAME__ || ''}>
+                        <Routes>
+                          <Route path="/" element={<AppContent />} />
+                          <Route path="/session/:sessionId" element={<AppContent />} />
+                          <Route
+                            path="/admin"
+                            element={
+                              <AdminRoute>
+                                <AdminPanel />
+                              </AdminRoute>
+                            }
+                          />
+                        </Routes>
+                      </Router>
+                    </ProtectedRoute>
+                  </UIConfigProvider>
                 </TaskMasterProvider>
               </TasksSettingsProvider>
             </PluginsProvider>

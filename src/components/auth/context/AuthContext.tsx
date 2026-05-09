@@ -199,6 +199,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       needsSetup,
       hasCompletedOnboarding,
       error,
+      isAdmin: user?.role === 'admin',
       login,
       register,
       logout,

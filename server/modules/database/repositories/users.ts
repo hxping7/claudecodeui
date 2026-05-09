@@ -18,9 +18,10 @@ type UserRow = {
   git_name: string | null;
   git_email: string | null;
   has_completed_onboarding: number;
+  role: 'admin' | 'user';
 };
 
-type UserPublicRow = Pick<UserRow, 'id' | 'username' | 'created_at' | 'last_login'>;
+type UserPublicRow = Pick<UserRow, 'id' | 'username' | 'created_at' | 'last_login' | 'role'>;
 
 type UserGitConfig = {
   git_name: string | null;
@@ -47,11 +48,11 @@ export const userDb = {
   },
 
   /** Inserts a new user and returns the created ID + username. */
-  createUser(username: string, passwordHash: string): CreateUserResult {
+  createUser(username: string, passwordHash: string, role: 'admin' | 'user' = 'user'): CreateUserResult {
     const db = getConnection();
     const result = db
-      .prepare('INSERT INTO users (username, password_hash) VALUES (?, ?)')
-      .run(username, passwordHash);
+      .prepare('INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)')
+      .run(username, passwordHash, role);
     return { id: result.lastInsertRowid, username };
   },
 
@@ -84,7 +85,7 @@ export const userDb = {
     const db = getConnection();
     return db
       .prepare(
-        'SELECT id, username, created_at, last_login FROM users WHERE id = ? AND is_active = 1'
+        'SELECT id, username, created_at, last_login, role FROM users WHERE id = ? AND is_active = 1'
       )
       .get(userId) as UserPublicRow | undefined;
   },
@@ -94,7 +95,7 @@ export const userDb = {
     const db = getConnection();
     return db
       .prepare(
-        'SELECT id, username, created_at, last_login FROM users WHERE is_active = 1 LIMIT 1'
+        'SELECT id, username, created_at, last_login, role FROM users WHERE is_active = 1 LIMIT 1'
       )
       .get() as UserPublicRow | undefined;
   },
@@ -136,5 +137,99 @@ export const userDb = {
       .prepare('SELECT has_completed_onboarding FROM users WHERE id = ?')
       .get(userId) as { has_completed_onboarding: number } | undefined;
     return row?.has_completed_onboarding === 1;
+  },
+
+  // ===============================
+  // Admin methods
+  // ===============================
+
+  /** Returns all users (including inactive) for admin management. */
+  getAllUsers(): UserRow[] {
+    const db = getConnection();
+    return db
+      .prepare('SELECT * FROM users ORDER BY created_at DESC')
+      .all() as UserRow[];
+  },
+
+  /** Returns user by ID (including inactive, without password hash for admin). */
+  getUserByIdFull(userId: number): UserPublicRow | undefined {
+    const db = getConnection();
+    return db
+      .prepare('SELECT id, username, created_at, last_login, role, is_active, git_name, git_email, has_completed_onboarding FROM users WHERE id = ?')
+      .get(userId) as UserPublicRow | undefined;
+  },
+
+  /** Updates user information (admin only). */
+  updateUser(userId: number, updates: Partial<Pick<UserRow, 'username' | 'git_name' | 'git_email' | 'role'>>): boolean {
+    const db = getConnection();
+    const fields: string[] = [];
+    const values: any[] = [];
+
+    if (updates.username !== undefined) {
+      fields.push('username = ?');
+      values.push(updates.username);
+    }
+    if (updates.git_name !== undefined) {
+      fields.push('git_name = ?');
+      values.push(updates.git_name);
+    }
+    if (updates.git_email !== undefined) {
+      fields.push('git_email = ?');
+      values.push(updates.git_email);
+    }
+    if (updates.role !== undefined) {
+      fields.push('role = ?');
+      values.push(updates.role);
+    }
+
+    if (fields.length === 0) {
+      return false;
+    }
+
+    values.push(userId);
+    const result = db.prepare(`UPDATE users SET ${fields.join(', ')} WHERE id = ?`).run(...values);
+    return result.changes > 0;
+  },
+
+  /** Updates user password (admin reset). */
+  updatePassword(userId: number, passwordHash: string): boolean {
+    const db = getConnection();
+    const result = db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(passwordHash, userId);
+    return result.changes > 0;
+  },
+
+  /** Toggles user active status. */
+  toggleUserActive(userId: number, isActive: boolean): boolean {
+    const db = getConnection();
+    const result = db.prepare('UPDATE users SET is_active = ? WHERE id = ?').run(isActive ? 1 : 0, userId);
+    return result.changes > 0;
+  },
+
+  /** Checks if user is admin. */
+  isAdmin(userId: number): boolean {
+    const db = getConnection();
+    const row = db.prepare("SELECT role FROM users WHERE id = ?").get(userId) as { role: string } | undefined;
+    return row?.role === 'admin';
+  },
+
+  /** Gets user role. */
+  getUserRole(userId: number): 'admin' | 'user' | null {
+    const db = getConnection();
+    const row = db.prepare("SELECT role FROM users WHERE id = ?").get(userId) as { role: string } | undefined;
+    return row?.role as 'admin' | 'user' | null;
+  },
+
+  /** Counts total users. */
+  countUsers(): number {
+    const db = getConnection();
+    const row = db.prepare('SELECT COUNT(*) as count FROM users').get() as { count: number };
+    return row.count;
+  },
+
+  /** Deletes a user and all associated data. */
+  deleteUser(userId: number): boolean {
+    const db = getConnection();
+    const result = db.prepare('DELETE FROM users WHERE id = ?').run(userId);
+    return result.changes > 0;
   },
 };

@@ -377,27 +377,38 @@ function normalizeSearchableSessions(rows: SessionRepositoryRow[]): SearchableSe
 
 function buildProjectBuckets(searchableSessions: SearchableSessionRow[]): ProjectBucket[] {
   const projectBuckets = new Map<string, ProjectBucket>();
-  const projectMetadataCache = new Map<string, { projectId: string | null; projectDisplayName: string }>();
+  const projectMetadataCache = new Map<string, { projectId: string | null; projectDisplayName: string; projectPath: string }>();
 
   for (const session of searchableSessions) {
-    const key = makeProjectKey(session.project_path);
+    // Get project_path from project_id
+    let projectPath = '';
+    if (session.project_id) {
+      const project = projectsDb.getProjectById(session.project_id);
+      if (project) {
+        projectPath = project.project_path;
+      }
+    }
+
+    const key = makeProjectKey(projectPath);
     if (!projectBuckets.has(key)) {
       if (!projectMetadataCache.has(key)) {
         if (key === UNKNOWN_PROJECT_KEY) {
           projectMetadataCache.set(key, {
             projectId: null,
             projectDisplayName: 'Unknown Project',
+            projectPath: '',
           });
         } else {
-          const projectRow = projectsDb.getProjectPath(key);
+          const projectRow = projectPath ? projectsDb.getProjectPath(projectPath) : null;
           const customProjectName = typeof projectRow?.custom_project_name === 'string'
             ? projectRow.custom_project_name.trim()
             : '';
-          const displayName = customProjectName || path.basename(key) || key;
+          const displayName = customProjectName || path.basename(projectPath) || projectPath;
 
           projectMetadataCache.set(key, {
-            projectId: projectRow?.project_id ?? null,
+            projectId: projectRow?.project_id ?? session.project_id ?? null,
             projectDisplayName: displayName,
+            projectPath,
           });
         }
       }

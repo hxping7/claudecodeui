@@ -224,6 +224,45 @@ export const api = {
       }),
   },
 
+  // Admin endpoints (admin only)
+  admin: {
+    getUsers: () => authenticatedFetch('/api/admin/users'),
+    createUser: (username, password, role = 'user') =>
+      authenticatedFetch('/api/admin/users', {
+        method: 'POST',
+        body: JSON.stringify({ username, password, role }),
+      }),
+    updateUser: (userId, updates) =>
+      authenticatedFetch(`/api/admin/users/${userId}`, {
+        method: 'PATCH',
+        body: JSON.stringify(updates),
+      }),
+    deleteUser: (userId) =>
+      authenticatedFetch(`/api/admin/users/${userId}`, {
+        method: 'DELETE',
+      }),
+    resetPassword: (userId, password) =>
+      authenticatedFetch(`/api/admin/users/${userId}/reset-password`, {
+        method: 'POST',
+        body: JSON.stringify({ password }),
+      }),
+    toggleUser: (userId, isActive) =>
+      authenticatedFetch(`/api/admin/users/${userId}/toggle`, {
+        method: 'PATCH',
+        body: JSON.stringify({ isActive }),
+      }),
+  },
+
+  // Settings endpoints
+  settings: {
+    getAgentConfig: () => authenticatedFetch('/api/settings/agent-config'),
+    updateAgentConfig: (config) =>
+      authenticatedFetch('/api/settings/agent-config', {
+        method: 'PUT',
+        body: JSON.stringify(config),
+      }),
+  },
+
   // Generic GET method for any endpoint
   get: (endpoint) => authenticatedFetch(`/api${endpoint}`),
 

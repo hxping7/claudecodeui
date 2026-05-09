@@ -67,8 +67,10 @@ function resolveRouteErrorMessage(error: unknown): string {
 
 router.get(
   '/',
-  asyncHandler(async (_req, res) => {
-    const projects = await getProjectsWithSessions();
+  asyncHandler(async (req, res) => {
+    const authenticatedUser = (req as typeof req & { user?: AuthenticatedUser }).user;
+    const userId = typeof authenticatedUser?.id === 'number' ? authenticatedUser.id : undefined;
+    const projects = await getProjectsWithSessions({ userId });
     res.json(projects);
   }),
 );
@@ -106,18 +108,19 @@ router.post(
       });
     }
 
+    const authenticatedUser = (req as typeof req & { user?: AuthenticatedUser }).user;
+    const userId = typeof authenticatedUser?.id === 'number' ? authenticatedUser.id : undefined;
+
     const projectCreationResult = await createProject({
       projectPath,
       customName,
+      userId,
     });
 
     res.json({
       success: true,
       project: projectCreationResult.project,
-      message:
-        projectCreationResult.outcome === 'reactivated_archived'
-          ? 'Archived project path reused successfully'
-          : 'Project created successfully',
+      message: 'Project created successfully',
     });
   }),
 );

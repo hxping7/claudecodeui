@@ -28,7 +28,7 @@ const authenticateToken = async (req, res, next) => {
       if (!user) {
         return res.status(500).json({ error: 'Platform mode: No user found in database' });
       }
-      req.user = user;
+      req.user = { ...user, role: user.role || 'user' };
       return next();
     } catch (error) {
       console.error('Platform mode error:', error);
@@ -68,7 +68,8 @@ const authenticateToken = async (req, res, next) => {
       }
     }
 
-    req.user = user;
+    // Add role to user object
+    req.user = { ...user, role: user.role || 'user' };
     next();
   } catch (error) {
     console.error('Token verification error:', error);
@@ -81,7 +82,8 @@ const generateToken = (user) => {
   return jwt.sign(
     {
       userId: user.id,
-      username: user.username
+      username: user.username,
+      role: user.role || 'user'
     },
     JWT_SECRET,
     { expiresIn: '7d' }
@@ -95,7 +97,7 @@ const authenticateWebSocket = (token) => {
     try {
       const user = userDb.getFirstUser();
       if (user) {
-        return { id: user.id, userId: user.id, username: user.username };
+        return { id: user.id, userId: user.id, username: user.username, role: user.role || 'user' };
       }
       return null;
     } catch (error) {
@@ -116,7 +118,7 @@ const authenticateWebSocket = (token) => {
     if (!user) {
       return null;
     }
-    return { userId: user.id, username: user.username };
+    return { userId: user.id, username: user.username, role: user.role || 'user' };
   } catch (error) {
     console.error('WebSocket token verification error:', error);
     return null;

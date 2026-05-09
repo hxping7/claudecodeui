@@ -51,6 +51,7 @@ type GetProjectsWithSessionsOptions = {
   skipSynchronization?: boolean;
   sessionsLimit?: number;
   sessionsOffset?: number;
+  userId?: number;
 };
 
 type SessionPaginationOptions = {
@@ -153,17 +154,17 @@ function bucketSessionRowsByProvider(rows: SessionRepositoryRow[]): SessionsByPr
 /**
  * Reads one paginated project session slice from the DB and groups rows by provider.
  */
-function readProjectSessionsPageByPath(
-  projectPath: string,
+function readProjectSessionsPageById(
+  projectId: string,
   options: SessionPaginationOptions = {},
 ): ProjectSessionsPageResult {
   const pagination = normalizeSessionPagination(options);
-  const rows = sessionsDb.getSessionsByProjectPathPage(
-    projectPath,
+  const rows = sessionsDb.getSessionsByProjectIdPage(
+    projectId,
     pagination.limit,
     pagination.offset,
   ) as SessionRepositoryRow[];
-  const total = sessionsDb.countSessionsByProjectPath(projectPath);
+  const total = sessionsDb.countSessionsByProjectId(projectId);
 
   return {
     sessionsByProvider: bucketSessionRowsByProvider(rows),
@@ -196,12 +197,20 @@ export async function getProjectsWithSessions(
     await sessionSynchronizerService.synchronizeSessions();
   }
 
-  const projectRows = projectsDb.getProjectPaths() as Array<{
-    project_id: string;
-    project_path: string;
-    custom_project_name?: string | null;
-    isStarred?: number;
-  }>;
+  // Use user-specific projects if userId is provided, otherwise get all projects
+  const projectRows = options.userId
+    ? projectsDb.getProjectPathsByUserId(options.userId) as Array<{
+        project_id: string;
+        project_path: string;
+        custom_project_name?: string | null;
+        isStarred?: number;
+      }>
+    : projectsDb.getProjectPaths() as Array<{
+        project_id: string;
+        project_path: string;
+        custom_project_name?: string | null;
+        isStarred?: number;
+      }>;
   const totalProjects = projectRows.length;
   const projects: ProjectListItem[] = [];
   let processedProjects = 0;
@@ -224,7 +233,7 @@ export async function getProjectsWithSessions(
         ? row.custom_project_name
         : await generateDisplayName(path.basename(projectPath) || projectPath, projectPath);
 
-    const sessionsPage = readProjectSessionsPageByPath(projectPath, {
+    const sessionsPage = readProjectSessionsPageById(projectId, {
       limit: options.sessionsLimit,
       offset: options.sessionsOffset,
     });
@@ -270,7 +279,7 @@ export async function getProjectSessionsPage(
     });
   }
 
-  const sessionsPage = readProjectSessionsPageByPath(projectRow.project_path, options);
+  const sessionsPage = readProjectSessionsPageById(projectId, options);
   return {
     projectId: projectRow.project_id,
     sessions: sessionsPage.sessionsByProvider.claude,

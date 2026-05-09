@@ -1,7 +1,10 @@
-import { Settings, ArrowUpCircle, Bug } from 'lucide-react';
+import { Settings, ArrowUpCircle, Bug, Shield, LogOut, Star } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import type { TFunction } from 'i18next';
 import { IS_PLATFORM } from '../../../../constants/config';
 import type { ReleaseInfo } from '../../../../types/sharedTypes';
+import { useAuth } from '../../../auth/context/AuthContext';
+import { useUIConfig } from '../../../../contexts/UIConfigContext';
 
 const GITHUB_ISSUES_URL = 'https://github.com/siteboon/claudecodeui/issues/new';
 const GITHUB_REPO_URL = 'https://github.com/siteboon/claudecodeui';
@@ -35,6 +38,9 @@ export default function SidebarFooter({
   onShowSettings,
   t,
 }: SidebarFooterProps) {
+  const navigate = useNavigate();
+  const { isAdmin, logout } = useAuth();
+  const { config: uiConfig } = useUIConfig();
   return (
     <div className="flex-shrink-0" style={{ paddingBottom: 'env(safe-area-inset-bottom, 0)' }}>
       {/* Update banner */}
@@ -89,30 +95,34 @@ export default function SidebarFooter({
       <div className="nav-divider" />
 
       {/* Desktop Report Issue */}
-      <div className="hidden px-2 pt-1.5 md:block">
-        <a
-          href={GITHUB_ISSUES_URL}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-muted-foreground transition-colors hover:bg-accent/60 hover:text-foreground"
-        >
-          <Bug className="h-3.5 w-3.5" />
-          <span className="text-sm">{t('actions.reportIssue')}</span>
-        </a>
-      </div>
+      {uiConfig.showReportIssue && (
+        <div className="hidden px-2 pt-1.5 md:block">
+          <a
+            href={GITHUB_ISSUES_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-muted-foreground transition-colors hover:bg-accent/60 hover:text-foreground"
+          >
+            <Bug className="h-3.5 w-3.5" />
+            <span className="text-sm">{t('actions.reportIssue')}</span>
+          </a>
+        </div>
+      )}
 
       {/* Desktop Discord */}
-      <div className="hidden px-2 md:block">
-        <a
-          href={DISCORD_INVITE_URL}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-muted-foreground transition-colors hover:bg-accent/60 hover:text-foreground"
-        >
-          <DiscordIcon className="h-3.5 w-3.5" />
-          <span className="text-sm">{t('actions.joinCommunity')}</span>
-        </a>
-      </div>
+      {uiConfig.showJoinCommunity && (
+        <div className="hidden px-2 md:block">
+          <a
+            href={DISCORD_INVITE_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-muted-foreground transition-colors hover:bg-accent/60 hover:text-foreground"
+          >
+            <DiscordIcon className="h-3.5 w-3.5" />
+            <span className="text-sm">{t('actions.joinCommunity')}</span>
+          </a>
+        </div>
+      )}
 
       {/* Desktop settings */}
       <div className="hidden px-2 py-1.5 md:block">
@@ -125,8 +135,34 @@ export default function SidebarFooter({
         </button>
       </div>
 
-      {/* Desktop version brand line (OSS mode only) */}
+      {/* Desktop Admin (admin only) */}
+      {isAdmin && (
+        <div className="hidden px-2 py-1.5 md:block">
+          <button
+            className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-muted-foreground transition-colors hover:bg-accent/60 hover:text-foreground"
+            onClick={() => navigate('/admin')}
+          >
+            <Shield className="h-3.5 w-3.5" />
+            <span className="text-sm">{t('actions.admin')}</span>
+          </button>
+        </div>
+      )}
+
+      {/* Desktop Logout */}
       {!IS_PLATFORM && (
+        <div className="hidden px-2 py-1.5 md:block">
+          <button
+            className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-muted-foreground transition-colors hover:bg-accent/60 hover:text-foreground"
+            onClick={logout}
+          >
+            <LogOut className="h-3.5 w-3.5" />
+            <span className="text-sm">{t('actions.logout')}</span>
+          </button>
+        </div>
+      )}
+
+      {/* Desktop version brand line (OSS mode only) */}
+      {!IS_PLATFORM && uiConfig.showVersion && (
         <div className="hidden px-3 py-2 text-center md:block">
           <a
             href={GITHUB_REPO_URL}
@@ -134,40 +170,44 @@ export default function SidebarFooter({
             rel="noopener noreferrer"
             className="text-[10px] text-muted-foreground/40 transition-colors hover:text-muted-foreground"
           >
-            CloudCLI v{currentVersion} – {t('branding.openSource')}
+            {uiConfig.appName} v{currentVersion} – {t('branding.openSource')}
           </a>
         </div>
       )}
 
       {/* Mobile Report Issue */}
-      <div className="px-3 pt-3 md:hidden">
-        <a
-          href={GITHUB_ISSUES_URL}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="flex h-12 w-full items-center gap-3.5 rounded-xl bg-muted/40 px-4 transition-all hover:bg-muted/60 active:scale-[0.98]"
-        >
-          <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-background/80">
-            <Bug className="w-4.5 h-4.5 text-muted-foreground" />
-          </div>
-          <span className="text-base font-medium text-foreground">{t('actions.reportIssue')}</span>
-        </a>
-      </div>
+      {uiConfig.showReportIssue && (
+        <div className="px-3 pt-3 md:hidden">
+          <a
+            href={GITHUB_ISSUES_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex h-12 w-full items-center gap-3.5 rounded-xl bg-muted/40 px-4 transition-all hover:bg-muted/60 active:scale-[0.98]"
+          >
+            <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-background/80">
+              <Bug className="w-4.5 h-4.5 text-muted-foreground" />
+            </div>
+            <span className="text-base font-medium text-foreground">{t('actions.reportIssue')}</span>
+          </a>
+        </div>
+      )}
 
       {/* Mobile Discord */}
-      <div className="px-3 pt-2 md:hidden">
-        <a
-          href={DISCORD_INVITE_URL}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="flex h-12 w-full items-center gap-3.5 rounded-xl bg-muted/40 px-4 transition-all hover:bg-muted/60 active:scale-[0.98]"
-        >
-          <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-background/80">
-            <DiscordIcon className="w-4.5 h-4.5 text-muted-foreground" />
-          </div>
-          <span className="text-base font-medium text-foreground">{t('actions.joinCommunity')}</span>
-        </a>
-      </div>
+      {uiConfig.showJoinCommunity && (
+        <div className="px-3 pt-2 md:hidden">
+          <a
+            href={DISCORD_INVITE_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex h-12 w-full items-center gap-3.5 rounded-xl bg-muted/40 px-4 transition-all hover:bg-muted/60 active:scale-[0.98]"
+          >
+            <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-background/80">
+              <DiscordIcon className="w-4.5 h-4.5 text-muted-foreground" />
+            </div>
+            <span className="text-base font-medium text-foreground">{t('actions.joinCommunity')}</span>
+          </a>
+        </div>
+      )}
 
       {/* Mobile settings */}
       <div className="px-3 pb-3 pt-2 md:hidden">
@@ -181,6 +221,36 @@ export default function SidebarFooter({
           <span className="text-base font-medium text-foreground">{t('actions.settings')}</span>
         </button>
       </div>
+
+      {/* Mobile Admin (admin only) */}
+      {isAdmin && (
+        <div className="px-3 pb-3 md:hidden">
+          <button
+            className="flex h-12 w-full items-center gap-3.5 rounded-xl bg-muted/40 px-4 transition-all hover:bg-muted/60 active:scale-[0.98]"
+            onClick={() => navigate('/admin')}
+          >
+            <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-background/80">
+              <Shield className="w-4.5 h-4.5 text-muted-foreground" />
+            </div>
+            <span className="text-base font-medium text-foreground">{t('actions.admin')}</span>
+          </button>
+        </div>
+      )}
+
+      {/* Mobile Logout */}
+      {!IS_PLATFORM && (
+        <div className="px-3 pb-3 md:hidden">
+          <button
+            className="flex h-12 w-full items-center gap-3.5 rounded-xl bg-muted/40 px-4 transition-all hover:bg-muted/60 active:scale-[0.98]"
+            onClick={logout}
+          >
+            <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-background/80">
+              <LogOut className="w-4.5 h-4.5 text-muted-foreground" />
+            </div>
+            <span className="text-base font-medium text-foreground">{t('actions.logout')}</span>
+          </button>
+        </div>
+      )}
     </div>
   );
 }

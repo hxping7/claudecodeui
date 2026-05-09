@@ -12,12 +12,13 @@ import { AppError, normalizeProjectPath, validateWorkspacePath } from '@/shared/
 type CreateProjectInput = {
   projectPath: string;
   customName?: string | null;
+  userId?: number;
 };
 
 type CreateProjectDependencies = {
   validatePath: (projectPath: string) => Promise<WorkspacePathValidationResult>;
   ensureWorkspaceDirectory: (projectPath: string) => Promise<void>;
-  persistProjectPath: (projectPath: string, customName: string | null) => CreateProjectPathResult;
+  persistProjectPath: (projectPath: string, customName: string | null, userId?: number) => CreateProjectPathResult;
   getProjectByPath: (projectPath: string) => ProjectRepositoryRow | null;
 };
 
@@ -56,8 +57,8 @@ const defaultDependencies: CreateProjectDependencies = {
       });
     }
   },
-  persistProjectPath: (projectPath: string, customName: string | null): CreateProjectPathResult =>
-    projectsDb.createProjectPath(projectPath, customName),
+  persistProjectPath: (projectPath: string, customName: string | null, userId?: number): CreateProjectPathResult =>
+    projectsDb.createProjectPath(projectPath, customName, userId),
   getProjectByPath: (projectPath: string): ProjectRepositoryRow | null =>
     projectsDb.getProjectPath(projectPath),
 };
@@ -116,28 +117,19 @@ export async function createProject(
   await dependencies.ensureWorkspaceDirectory(resolvedProjectPath);
 
   const normalizedCustomName = resolveDisplayName(input.customName ?? null, resolvedProjectPath);
-  const persistedProject = dependencies.persistProjectPath(resolvedProjectPath, normalizedCustomName);
+  // Always create a new project - multiple projects can share the same path
+  const persistedProject = dependencies.persistProjectPath(resolvedProjectPath, normalizedCustomName, input.userId);
 
-  if (persistedProject.outcome === 'active_conflict') {
-    throw new AppError('Project path already exists and is active', {
-      code: 'PROJECT_ALREADY_EXISTS',
-      statusCode: 409,
-      details: `Project path already exists: ${resolvedProjectPath}`,
-    });
-  }
-
-  const projectRow = persistedProject.project ?? dependencies.getProjectByPath(resolvedProjectPath);
-  if (!projectRow) {
-    throw new AppError('Failed to resolve project after creation', {
+  if (!persistedProject.project) {
+    throw new AppError('Failed to create project', {
       code: 'PROJECT_CREATE_FAILED',
       statusCode: 500,
     });
   }
 
-  // Archived rows intentionally remain archived when reused, as requested.
   return {
-    outcome: persistedProject.outcome,
-    project: mapProjectRowToApiView(projectRow),
+    outcome: 'created',
+    project: mapProjectRowToApiView(persistedProject.project),
   };
 }
 

@@ -16,31 +16,32 @@ function normalizeProjectDisplayName(projectPath: string, customProjectName: str
 }
 
 export const projectsDb = {
-    createProjectPath(projectPath: string, customProjectName: string | null = null): CreateProjectPathResult {
+    /**
+     * Create a new project. Multiple projects can share the same directory path.
+     * Each project has a unique project_id and can have a different custom_project_name.
+     */
+    createProjectPath(projectPath: string, customProjectName: string | null = null, userId?: number): CreateProjectPathResult {
         const db = getConnection();
         const normalizedProjectPath = normalizeProjectPath(projectPath);
         const normalizedProjectName = normalizeProjectDisplayName(normalizedProjectPath, customProjectName);
-        const attemptedId = randomUUID();
+        const projectId = randomUUID();
+
         const row = db.prepare(`
-        INSERT INTO projects (project_id, project_path, custom_project_name, isArchived)
-            VALUES (?, ?, ?, 0)
-            ON CONFLICT(project_path) DO UPDATE SET
-            isArchived = 0
-            WHERE projects.isArchived = 1
-            RETURNING project_id, project_path, custom_project_name, isStarred, isArchived
-        `).get(attemptedId, normalizedProjectPath, normalizedProjectName) as ProjectRepositoryRow | undefined;
+            INSERT INTO projects (project_id, project_path, custom_project_name, user_id, isArchived)
+            VALUES (?, ?, ?, ?, 0)
+            RETURNING project_id, project_path, custom_project_name, isStarred, isArchived, user_id
+        `).get(projectId, normalizedProjectPath, normalizedProjectName, userId ?? null) as ProjectRepositoryRow | undefined;
 
         if (row) {
             return {
-                outcome: row.project_id === attemptedId ? 'created' : 'reactivated_archived',
+                outcome: 'created',
                 project: row,
             };
         }
 
-        const existingProject = projectsDb.getProjectPath(normalizedProjectPath);
         return {
             outcome: 'active_conflict',
-            project: existingProject,
+            project: null,
         };
     },
 
@@ -50,7 +51,8 @@ export const projectsDb = {
         const row = db.prepare(`
             SELECT project_id, project_path, custom_project_name, isStarred, isArchived
             FROM projects
-            WHERE project_path = ?
+            WHERE project_path = ? AND isArchived = 0
+            LIMIT 1
         `).get(normalizedProjectPath) as ProjectRepositoryRow | undefined;
 
         return row ?? null;
@@ -69,11 +71,6 @@ export const projectsDb = {
 
     /**
      * Resolve the absolute project directory from a database project_id.
-     *
-     * This is the canonical lookup used after the projectName → projectId migration:
-     * API routes receive the DB-assigned `projectId` and must resolve the real folder
-     * path through this helper before touching the filesystem. Returns `null` when the
-     * project row does not exist so callers can respond with a 404.
      */
     getProjectPathById(projectId: string): string | null {
         const db = getConnection();
@@ -95,6 +92,20 @@ export const projectsDb = {
         `).all() as ProjectRepositoryRow[];
     },
 
+    /**
+     * Get all projects for a given directory path.
+     * Returns multiple projects if they share the same path.
+     */
+    getProjectsByPath(projectPath: string): ProjectRepositoryRow[] {
+        const db = getConnection();
+        const normalizedProjectPath = normalizeProjectPath(projectPath);
+        return db.prepare(`
+            SELECT project_id, project_path, custom_project_name, isStarred, isArchived, user_id
+            FROM projects
+            WHERE project_path = ? AND isArchived = 0
+        `).all(normalizedProjectPath) as ProjectRepositoryRow[];
+    },
+
     getCustomProjectName(projectPath: string): string | null {
         const db = getConnection();
         const normalizedProjectPath = normalizeProjectPath(projectPath);
@@ -102,6 +113,7 @@ export const projectsDb = {
             SELECT custom_project_name
             FROM projects
             WHERE project_path = ?
+            LIMIT 1
         `).get(normalizedProjectPath) as Pick<ProjectRepositoryRow, 'custom_project_name'> | undefined;
 
         return row?.custom_project_name ?? null;
@@ -111,10 +123,10 @@ export const projectsDb = {
         const db = getConnection();
         const normalizedProjectPath = normalizeProjectPath(projectPath);
         db.prepare(`
-            INSERT INTO projects (project_id, project_path, custom_project_name)
-            VALUES (?, ?, ?)
-            ON CONFLICT(project_path) DO UPDATE SET custom_project_name = excluded.custom_project_name
-        `).run(randomUUID(), normalizedProjectPath, customProjectName);
+            UPDATE projects
+            SET custom_project_name = ?
+            WHERE project_path = ?
+        `).run(customProjectName, normalizedProjectPath);
     },
 
     updateCustomProjectNameById(projectId: string, customProjectName: string | null): void {
@@ -179,5 +191,74 @@ export const projectsDb = {
             DELETE FROM projects
             WHERE project_id = ?
         `).run(projectId);
+    },
+
+    // ===============================
+    // Multi-tenant methods (user isolation)
+    // ===============================
+
+    /** Get all project paths for a specific user */
+    getProjectPathsByUserId(userId: number): ProjectRepositoryRow[] {
+        const db = getConnection();
+        return db.prepare(`
+            SELECT project_id, project_path, custom_project_name, isStarred, isArchived, user_id
+            FROM projects
+            WHERE user_id = ? AND isArchived = 0
+        `).all(userId) as ProjectRepositoryRow[];
+    },
+
+    /** Get project by ID only if it belongs to the user */
+    getProjectByIdAndUserId(userId: number, projectId: string): ProjectRepositoryRow | null {
+        const db = getConnection();
+        const row = db.prepare(`
+            SELECT project_id, project_path, custom_project_name, isStarred, isArchived, user_id
+            FROM projects
+            WHERE project_id = ? AND user_id = ?
+        `).get(projectId, userId) as ProjectRepositoryRow | undefined;
+
+        return row ?? null;
+    },
+
+    /** Delete project only if it belongs to the user */
+    deleteProjectByIdAndUserId(userId: number, projectId: string): boolean {
+        const db = getConnection();
+        return db.prepare('DELETE FROM projects WHERE project_id = ? AND user_id = ?').run(projectId, userId).changes > 0;
+    },
+
+    /** Get project path by ID only if it belongs to the user (returns null if not found or not owned) */
+    getProjectPathByIdAndUserId(userId: number, projectId: string): string | null {
+        const db = getConnection();
+        const row = db.prepare(`
+            SELECT project_path
+            FROM projects
+            WHERE project_id = ? AND user_id = ?
+        `).get(projectId, userId) as Pick<ProjectRepositoryRow, 'project_path'> | undefined;
+
+        return row?.project_path ?? null;
+    },
+
+    /**
+     * Check if a directory path is already used by any project for this user.
+     * Returns true if the path is already in use.
+     */
+    isProjectPathInUse(projectPath: string, userId?: number): boolean {
+        const db = getConnection();
+        const normalizedProjectPath = normalizeProjectPath(projectPath);
+
+        if (userId) {
+            const row = db.prepare(`
+                SELECT COUNT(*) as count
+                FROM projects
+                WHERE project_path = ? AND user_id = ? AND isArchived = 0
+            `).get(normalizedProjectPath, userId) as { count: number } | undefined;
+            return (row?.count ?? 0) > 0;
+        }
+
+        const row = db.prepare(`
+            SELECT COUNT(*) as count
+            FROM projects
+            WHERE project_path = ? AND isArchived = 0
+        `).get(normalizedProjectPath) as { count: number } | undefined;
+        return (row?.count ?? 0) > 0;
     },
 };

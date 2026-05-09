@@ -21,40 +21,38 @@ router.get('/status', async (req, res) => {
   }
 });
 
-// User registration (setup) - only allowed if no users exist
+// User registration - first user becomes admin, subsequent users are regular users
 router.post('/register', async (req, res) => {
   try {
     const { username, password } = req.body;
-    
+
     // Validate input
     if (!username || !password) {
       return res.status(400).json({ error: 'Username and password are required' });
     }
-    
+
     if (username.length < 3 || password.length < 6) {
       return res.status(400).json({ error: 'Username must be at least 3 characters, password at least 6 characters' });
     }
-    
+
     // Use a transaction to prevent race conditions
     db.prepare('BEGIN').run();
     try {
-      // Check if users already exist (only allow one user)
-      const hasUsers = userDb.hasUsers();
-      if (hasUsers) {
-        db.prepare('ROLLBACK').run();
-        return res.status(403).json({ error: 'User already exists. This is a single-user system.' });
-      }
-      
+      // Check if this is the first user (becomes admin)
+      const userCount = userDb.countUsers();
+      const isFirstUser = userCount === 0;
+      const role = isFirstUser ? 'admin' : 'user';
+
       // Hash password
       const saltRounds = 12;
       const passwordHash = await bcrypt.hash(password, saltRounds);
-      
-      // Create user
-      const user = userDb.createUser(username, passwordHash);
-      
+
+      // Create user with role
+      const user = userDb.createUser(username, passwordHash, role);
+
       // Generate token
-      const token = generateToken(user);
-      
+      const token = generateToken({ ...user, role });
+
       db.prepare('COMMIT').run();
 
       // Update last login (non-fatal, outside transaction)
@@ -62,14 +60,14 @@ router.post('/register', async (req, res) => {
 
       res.json({
         success: true,
-        user: { id: user.id, username: user.username },
+        user: { id: user.id, username: user.username, role },
         token
       });
     } catch (error) {
       db.prepare('ROLLBACK').run();
       throw error;
     }
-    
+
   } catch (error) {
     console.error('Registration error:', error);
     if (error.code === 'SQLITE_CONSTRAINT_UNIQUE') {
@@ -104,13 +102,13 @@ router.post('/login', async (req, res) => {
     
     // Generate token
     const token = generateToken(user);
-    
+
     // Update last login
     userDb.updateLastLogin(user.id);
-    
+
     res.json({
       success: true,
-      user: { id: user.id, username: user.username },
+      user: { id: user.id, username: user.username, role: user.role || 'user' },
       token
     });
     
