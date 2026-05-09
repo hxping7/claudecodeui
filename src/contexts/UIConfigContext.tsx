@@ -41,6 +41,7 @@ const defaultConfig: UIConfig = {
 
 type UIConfigContextType = {
   config: UIConfig;
+  isLoading: boolean;
   refreshConfig: () => Promise<void>;
 };
 
@@ -56,6 +57,7 @@ export const useUIConfig = () => {
 
 export const UIConfigProvider = ({ children }: { children: ReactNode }) => {
   const [config, setConfig] = useState<UIConfig>(defaultConfig);
+  const [isLoading, setIsLoading] = useState(true);
 
   const refreshConfig = useCallback(async () => {
     try {
@@ -69,6 +71,8 @@ export const UIConfigProvider = ({ children }: { children: ReactNode }) => {
       }
     } catch (error) {
       console.error('Failed to load UI config:', error);
+    } finally {
+      setIsLoading(false);
     }
   }, []);
 
@@ -92,7 +96,7 @@ export const UIConfigProvider = ({ children }: { children: ReactNode }) => {
   }, []);
 
   return (
-    <UIConfigContext.Provider value={{ config, refreshConfig }}>
+    <UIConfigContext.Provider value={{ config, isLoading, refreshConfig }}>
       {children}
     </UIConfigContext.Provider>
   );

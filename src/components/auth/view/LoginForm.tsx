@@ -25,7 +25,7 @@ const initialState: LoginFormState = {
 export default function LoginForm() {
   const { t } = useTranslation('auth');
   const { login } = useAuth();
-  const { config: uiConfig } = useUIConfig();
+  const { config: uiConfig, isLoading: isConfigLoading } = useUIConfig();
 
   const [formState, setFormState] = useState<LoginFormState>(initialState);
   const [errorMessage, setErrorMessage] = useState('');
@@ -57,6 +57,15 @@ export default function LoginForm() {
     },
     [formState.password, formState.username, login, t],
   );
+
+  // Show loading state while config is being fetched
+  if (isConfigLoading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
 
   return (
     <AuthScreenLayout
