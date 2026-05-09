@@ -588,6 +588,8 @@ router.put('/provider-settings/:provider', async (req, res) => {
 // ===============================
 // Models Configuration from settings.json
 // ===============================
+// Public endpoint - no authentication required for model mapping
+// ===============================
 
 // Get available models from provider settings.json files
 router.get('/models', async (req, res) => {

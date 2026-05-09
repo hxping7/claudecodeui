@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback } from 'react';
-import { api } from '../utils/api';
 
 export type MappedModel = {
   value: string;
@@ -39,7 +38,8 @@ export function useMappedModels() {
   const fetchMappedModels = useCallback(async () => {
     try {
       setIsLoading(true);
-      const response = await api.get('/settings/models');
+      // Use public endpoint that doesn't require authentication
+      const response = await fetch('/api/public/models');
       const data = await response.json();
       if (data.success && data.models) {
         setMappedModels({
