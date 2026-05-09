@@ -4,6 +4,7 @@ import { Trans, useTranslation } from "react-i18next";
 
 import { useServerPlatform } from "../../../../hooks/useServerPlatform";
 import { useVisibleProviders } from "../../../../hooks/useVisibleProviders";
+import { useMappedModels, type MappedModel } from "../../../../hooks/useMappedModels";
 import SessionProviderLogo from "../../../llm-logo-provider/SessionProviderLogo";
 import {
   CLAUDE_MODELS,
@@ -57,7 +58,8 @@ type ProviderGroup = {
   models: { value: string; label: string }[];
 };
 
-const PROVIDER_GROUPS: ProviderGroup[] = PROVIDERS.map((p) => ({
+// Static fallback groups
+const STATIC_PROVIDER_GROUPS: ProviderGroup[] = PROVIDERS.map((p) => ({
   id: p.id as LLMProvider,
   name: p.name,
   models: p.models.OPTIONS,
@@ -112,12 +114,40 @@ export default function ProviderSelectionEmptyState({
   const { t } = useTranslation("chat");
   const { isWindowsServer } = useServerPlatform();
   const { visibleProviders: configuredVisibleProviders } = useVisibleProviders();
+  const { mappedModels, isLoading: isLoadingModels } = useMappedModels();
   const [dialogOpen, setDialogOpen] = useState(false);
+
+  // Build provider groups with mapped models from settings.json
+  const providerGroups = useMemo<ProviderGroup[]>(() => {
+    return PROVIDERS.map((p) => {
+      const providerId = p.id as LLMProvider;
+      const mappedProvider = mappedModels[providerId];
+
+      // If we have mapped models from settings.json, use them
+      if (mappedProvider?.models?.length > 0) {
+        return {
+          id: providerId,
+          name: p.name,
+          models: mappedProvider.models.map((m: MappedModel) => ({
+            value: m.value,
+            label: m.label,
+          })),
+        };
+      }
+
+      // Fallback to static models
+      return {
+        id: providerId,
+        name: p.name,
+        models: p.models.OPTIONS,
+      };
+    });
+  }, [mappedModels]);
 
   // Filter by server platform first (Cursor not available on Windows server)
   const platformFilteredGroups = useMemo(
-    () => (isWindowsServer ? PROVIDER_GROUPS.filter((p) => p.id !== "cursor") : PROVIDER_GROUPS),
-    [isWindowsServer],
+    () => (isWindowsServer ? providerGroups.filter((p) => p.id !== "cursor") : providerGroups),
+    [isWindowsServer, providerGroups],
   );
 
   // Further filter by user configuration
@@ -135,26 +165,6 @@ export default function ProviderSelectionEmptyState({
       localStorage.setItem("selected-provider", firstVisibleProvider);
     }
   }, [isWindowsServer, provider, setProvider, visibleProviderGroups]);
-
-  const nextTaskPrompt = t("tasks.nextTaskPrompt", {
-    defaultValue: "Start the next task",
-  });
-
-  const currentModel = getCurrentModel(
-    provider,
-    claudeModel,
-    cursorModel,
-    codexModel,
-    geminiModel,
-  );
-
-  const currentModelLabel = useMemo(() => {
-    const config = getModelConfig(provider);
-    const found = config.OPTIONS.find(
-      (o: { value: string; label: string }) => o.value === currentModel,
-    );
-    return found?.label || currentModel;
-  }, [provider, currentModel]);
 
   const setModelForProvider = useCallback(
     (providerId: LLMProvider, modelValue: string) => {
@@ -174,6 +184,34 @@ export default function ProviderSelectionEmptyState({
     },
     [setClaudeModel, setCursorModel, setCodexModel, setGeminiModel],
   );
+
+  const nextTaskPrompt = t("tasks.nextTaskPrompt", {
+    defaultValue: "Start the next task",
+  });
+
+  const currentModel = getCurrentModel(
+    provider,
+    claudeModel,
+    cursorModel,
+    codexModel,
+    geminiModel,
+  );
+
+  // Get label from mapped models or fallback to static
+  const currentModelLabel = useMemo(() => {
+    // First try to find in mapped models
+    const mappedProvider = mappedModels[provider];
+    if (mappedProvider?.models?.length > 0) {
+      const found = mappedProvider.models.find((m: MappedModel) => m.value === currentModel);
+      if (found) return found.label;
+    }
+    // Fallback to static models
+    const config = getModelConfig(provider);
+    const found = config.OPTIONS.find(
+      (o: { value: string; label: string }) => o.value === currentModel,
+    );
+    return found?.label || currentModel;
+  }, [provider, currentModel, mappedModels]);
 
   const handleModelSelect = useCallback(
     (providerId: LLMProvider, modelValue: string) => {

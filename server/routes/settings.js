@@ -607,18 +607,27 @@ router.get('/models', async (req, res) => {
         const settings = JSON.parse(content);
         const env = settings.env || {};
 
-        // Extract model configuration from env
+        // Build model list with mapped actual models from settings.json
+        // Label format: "Opus Model (glm-5)" if mapped, otherwise just "Opus Model"
+        const opusActual = env.ANTHROPIC_DEFAULT_OPUS_MODEL;
+        const sonnetActual = env.ANTHROPIC_DEFAULT_SONNET_MODEL;
+        const haikuActual = env.ANTHROPIC_DEFAULT_HAIKU_MODEL;
+
         models.claude = [
-          { value: 'opus', label: 'Opus', envKey: 'ANTHROPIC_DEFAULT_OPUS_MODEL', actualModel: env.ANTHROPIC_DEFAULT_OPUS_MODEL },
-          { value: 'sonnet', label: 'Sonnet', envKey: 'ANTHROPIC_DEFAULT_SONNET_MODEL', actualModel: env.ANTHROPIC_DEFAULT_SONNET_MODEL },
-          { value: 'haiku', label: 'Haiku', envKey: 'ANTHROPIC_DEFAULT_HAIKU_MODEL', actualModel: env.ANTHROPIC_DEFAULT_HAIKU_MODEL },
+          { value: 'default', label: opusActual ? `Default (${opusActual})` : 'Default', envKey: 'ANTHROPIC_MODEL', actualModel: opusActual },
+          { value: 'opus', label: opusActual ? `Opus Model (${opusActual})` : 'Opus Model', envKey: 'ANTHROPIC_DEFAULT_OPUS_MODEL', actualModel: opusActual },
+          { value: 'sonnet', label: sonnetActual ? `Sonnet Model (${sonnetActual})` : 'Sonnet Model', envKey: 'ANTHROPIC_DEFAULT_SONNET_MODEL', actualModel: sonnetActual },
+          { value: 'haiku', label: haikuActual ? `Haiku Model (${haikuActual})` : 'Haiku Model', envKey: 'ANTHROPIC_DEFAULT_HAIKU_MODEL', actualModel: haikuActual },
           { value: 'opus[1m]', label: 'Opus [1M]', envKey: null, actualModel: null },
           { value: 'sonnet[1m]', label: 'Sonnet [1M]', envKey: null, actualModel: null },
+          { value: 'claude-opus-4-6', label: 'Opus 4.6', envKey: null, actualModel: null },
+          { value: 'opusplan', label: 'Opus Plan', envKey: null, actualModel: null },
         ];
 
-        // If ANTHROPIC_MODEL is set, it's the default model
+        // If ANTHROPIC_MODEL is set, it's the default model value
         if (env.ANTHROPIC_MODEL) {
           models.claude.defaultModel = env.ANTHROPIC_MODEL;
+          models.claude.defaultActualModel = env.ANTHROPIC_MODEL;
         }
       } catch (e) {
         console.error('Error parsing Claude settings:', e);
