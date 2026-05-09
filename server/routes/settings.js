@@ -711,6 +711,14 @@ const DEFAULT_UI_CONFIG = {
   showJoinCommunity: true,
   showGitHubStar: true,
   showVersion: true,
+  showSettingsAgents: true,
+  showSettingsAppearance: true,
+  showSettingsGit: true,
+  showSettingsApi: true,
+  showSettingsTasks: true,
+  showSettingsPlugins: true,
+  showSettingsNotifications: true,
+  showSettingsAbout: true,
 };
 
 // Get UI configuration
@@ -735,6 +743,14 @@ router.put('/ui-config', requireAdmin, async (req, res) => {
       showJoinCommunity,
       showGitHubStar,
       showVersion,
+      showSettingsAgents,
+      showSettingsAppearance,
+      showSettingsGit,
+      showSettingsApi,
+      showSettingsTasks,
+      showSettingsPlugins,
+      showSettingsNotifications,
+      showSettingsAbout,
     } = req.body;
 
     const currentConfigValue = appConfigDb.get('ui_config');
@@ -747,6 +763,14 @@ router.put('/ui-config', requireAdmin, async (req, res) => {
       showJoinCommunity: typeof showJoinCommunity === 'boolean' ? showJoinCommunity : currentConfig.showJoinCommunity,
       showGitHubStar: typeof showGitHubStar === 'boolean' ? showGitHubStar : currentConfig.showGitHubStar,
       showVersion: typeof showVersion === 'boolean' ? showVersion : currentConfig.showVersion,
+      showSettingsAgents: typeof showSettingsAgents === 'boolean' ? showSettingsAgents : currentConfig.showSettingsAgents,
+      showSettingsAppearance: typeof showSettingsAppearance === 'boolean' ? showSettingsAppearance : currentConfig.showSettingsAppearance,
+      showSettingsGit: typeof showSettingsGit === 'boolean' ? showSettingsGit : currentConfig.showSettingsGit,
+      showSettingsApi: typeof showSettingsApi === 'boolean' ? showSettingsApi : currentConfig.showSettingsApi,
+      showSettingsTasks: typeof showSettingsTasks === 'boolean' ? showSettingsTasks : currentConfig.showSettingsTasks,
+      showSettingsPlugins: typeof showSettingsPlugins === 'boolean' ? showSettingsPlugins : currentConfig.showSettingsPlugins,
+      showSettingsNotifications: typeof showSettingsNotifications === 'boolean' ? showSettingsNotifications : currentConfig.showSettingsNotifications,
+      showSettingsAbout: typeof showSettingsAbout === 'boolean' ? showSettingsAbout : currentConfig.showSettingsAbout,
     };
 
     appConfigDb.set('ui_config', JSON.stringify(newConfig));

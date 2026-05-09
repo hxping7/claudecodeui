@@ -310,6 +310,10 @@
       "loggedInAs": "Logged in as {{email}}",
       "authenticatedUser": "authenticated user"
     },
+    "visibility": {
+      "title": "Show in Provider Selector",
+      "description": "Control which AI providers appear in the provider dropdown"
+    },
     "account": {
       "claude": {
         "description": "Anthropic Claude AI assistant"

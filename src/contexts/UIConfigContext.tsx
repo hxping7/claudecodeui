@@ -8,6 +8,15 @@ export interface UIConfig {
   showJoinCommunity: boolean;
   showGitHubStar: boolean;
   showVersion: boolean;
+  // Settings menu visibility
+  showSettingsAgents: boolean;
+  showSettingsAppearance: boolean;
+  showSettingsGit: boolean;
+  showSettingsApi: boolean;
+  showSettingsTasks: boolean;
+  showSettingsPlugins: boolean;
+  showSettingsNotifications: boolean;
+  showSettingsAbout: boolean;
 }
 
 const defaultConfig: UIConfig = {
@@ -17,6 +26,14 @@ const defaultConfig: UIConfig = {
   showJoinCommunity: true,
   showGitHubStar: true,
   showVersion: true,
+  showSettingsAgents: true,
+  showSettingsAppearance: true,
+  showSettingsGit: true,
+  showSettingsApi: true,
+  showSettingsTasks: true,
+  showSettingsPlugins: true,
+  showSettingsNotifications: true,
+  showSettingsAbout: true,
 };
 
 type UIConfigContextType = {

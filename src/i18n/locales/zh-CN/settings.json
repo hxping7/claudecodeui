@@ -310,6 +310,10 @@
       "loggedInAs": "登录为 {{email}}",
       "authenticatedUser": "已认证用户"
     },
+    "visibility": {
+      "title": "在提供商选择器中显示",
+      "description": "控制哪些 AI 提供商显示在提供商下拉菜单中"
+    },
     "account": {
       "claude": {
         "description": "Anthropic Claude AI 助手"

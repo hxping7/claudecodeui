@@ -11,6 +11,14 @@ interface UIConfig {
   showJoinCommunity: boolean;
   showGitHubStar: boolean;
   showVersion: boolean;
+  showSettingsAgents: boolean;
+  showSettingsAppearance: boolean;
+  showSettingsGit: boolean;
+  showSettingsApi: boolean;
+  showSettingsTasks: boolean;
+  showSettingsPlugins: boolean;
+  showSettingsNotifications: boolean;
+  showSettingsAbout: boolean;
 }
 
 const defaultConfig: UIConfig = {
@@ -20,6 +28,14 @@ const defaultConfig: UIConfig = {
   showJoinCommunity: true,
   showGitHubStar: true,
   showVersion: true,
+  showSettingsAgents: true,
+  showSettingsAppearance: true,
+  showSettingsGit: true,
+  showSettingsApi: true,
+  showSettingsTasks: true,
+  showSettingsPlugins: true,
+  showSettingsNotifications: true,
+  showSettingsAbout: true,
 };
 
 export default function UISettingsPanel() {
@@ -215,6 +231,43 @@ export default function UISettingsPanel() {
             { key: 'showJoinCommunity', label: t('uiSettings.showJoinCommunity') },
             { key: 'showGitHubStar', label: t('uiSettings.showGitHubStar') },
             { key: 'showVersion', label: t('uiSettings.showVersion') },
+          ].map(({ key, label }) => (
+            <label
+              key={key}
+              className="flex items-center justify-between p-3 rounded-lg hover:bg-muted/50 cursor-pointer"
+            >
+              <span>{label}</span>
+              <button
+                onClick={() => handleToggle(key as keyof UIConfig)}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                  config[key as keyof UIConfig] ? 'bg-primary' : 'bg-muted'
+                }`}
+              >
+                <span
+                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                    config[key as keyof UIConfig] ? 'translate-x-6' : 'translate-x-1'
+                  }`}
+                />
+              </button>
+            </label>
+          ))}
+        </div>
+      </div>
+
+      {/* Settings Menu Visibility Section */}
+      <div className="bg-card rounded-lg border p-6 space-y-6">
+        <h3 className="text-lg font-semibold">{t('uiSettings.settingsMenuVisibility')}</h3>
+
+        <div className="space-y-3">
+          {[
+            { key: 'showSettingsAgents', label: t('uiSettings.showSettingsAgents') },
+            { key: 'showSettingsAppearance', label: t('uiSettings.showSettingsAppearance') },
+            { key: 'showSettingsGit', label: t('uiSettings.showSettingsGit') },
+            { key: 'showSettingsApi', label: t('uiSettings.showSettingsApi') },
+            { key: 'showSettingsTasks', label: t('uiSettings.showSettingsTasks') },
+            { key: 'showSettingsPlugins', label: t('uiSettings.showSettingsPlugins') },
+            { key: 'showSettingsNotifications', label: t('uiSettings.showSettingsNotifications') },
+            { key: 'showSettingsAbout', label: t('uiSettings.showSettingsAbout') },
           ].map(({ key, label }) => (
             <label
               key={key}
