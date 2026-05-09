@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { ChevronDown, Check } from 'lucide-react';
 import { useMappedModels } from '../../../../hooks/useMappedModels';
 import type { LLMProvider } from '../../../types/app';
@@ -60,6 +61,39 @@ export default function ModelSelector({
     setIsOpen(false);
   };
 
+  const dropdownContent = isOpen && !disabled ? (
+    <div
+      className="fixed z-[9999] max-h-64 min-w-[180px] overflow-y-auto rounded-lg border border-border/60 bg-card shadow-lg"
+      style={{
+        bottom: dropdownRef.current
+          ? window.innerHeight - dropdownRef.current.getBoundingClientRect().top + window.scrollY + 4 + 'px'
+          : 'auto',
+        top: 'unset',
+        left: dropdownRef.current
+          ? dropdownRef.current.getBoundingClientRect().left + window.scrollX + 'px'
+          : 'auto',
+      }}
+    >
+      {models.map((model: { value: string; label: string }) => (
+        <button
+          key={model.value}
+          type="button"
+          onClick={() => handleSelect(model.value)}
+          className={`flex w-full items-center gap-2 px-3 py-2 text-left text-xs transition-colors ${
+            model.value === currentModel
+              ? 'bg-primary/10 text-primary'
+              : 'text-foreground hover:bg-muted'
+          }`}
+        >
+          <span className="flex-1 truncate">{model.label}</span>
+          {model.value === currentModel && (
+            <Check className="h-3 w-3 shrink-0 text-primary" />
+          )}
+        </button>
+      ))}
+    </div>
+  ) : null;
+
   return (
     <div ref={dropdownRef} className="relative">
       <button
@@ -78,27 +112,7 @@ export default function ModelSelector({
         <ChevronDown className={`h-3 w-3 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
       </button>
 
-      {isOpen && !disabled && (
-        <div className="absolute bottom-full left-0 z-50 mb-1 max-h-64 min-w-[180px] overflow-y-auto rounded-lg border border-border/60 bg-card shadow-lg">
-          {models.map((model: { value: string; label: string }) => (
-            <button
-              key={model.value}
-              type="button"
-              onClick={() => handleSelect(model.value)}
-              className={`flex w-full items-center gap-2 px-3 py-2 text-left text-xs transition-colors ${
-                model.value === currentModel
-                  ? 'bg-primary/10 text-primary'
-                  : 'text-foreground hover:bg-muted'
-              }`}
-            >
-              <span className="flex-1 truncate">{model.label}</span>
-              {model.value === currentModel && (
-                <Check className="h-3 w-3 shrink-0 text-primary" />
-              )}
-            </button>
-          ))}
-        </div>
-      )}
+      {typeof document !== 'undefined' && createPortal(dropdownContent, document.body)}
     </div>
   );
 }
