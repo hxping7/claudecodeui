@@ -10,6 +10,7 @@ import { useChatProviderState } from '../hooks/useChatProviderState';
 import { useChatSessionState } from '../hooks/useChatSessionState';
 import { useChatRealtimeHandlers } from '../hooks/useChatRealtimeHandlers';
 import { useChatComposerState } from '../hooks/useChatComposerState';
+import { useMessageQueue } from '../hooks/useMessageQueue';
 import { useSessionStore } from '../../../stores/useSessionStore';
 
 import ChatMessagesPane from './subcomponents/ChatMessagesPane';
@@ -206,6 +207,56 @@ function ChatInterface({
     setIsUserScrolledUp,
     setPendingPermissionRequests,
   });
+
+  // Message queue for sending messages during active session
+  const {
+    queue: messageQueue,
+    queueLength: messageQueueLength,
+    addToQueue,
+    processNextMessage,
+    finishProcessing,
+    clearQueue,
+  } = useMessageQueue();
+
+  // Handle queueing a message
+  const handleQueueMessage = useCallback((content: string, images: unknown[]) => {
+    const currentModel = provider === 'claude' ? claudeModel :
+                        provider === 'codex' ? codexModel :
+                        provider === 'gemini' ? geminiModel : cursorModel;
+    addToQueue(content, {
+      images,
+      provider,
+      model: currentModel,
+    });
+  }, [provider, claudeModel, codexModel, geminiModel, cursorModel, addToQueue]);
+
+  // Handle processing queue immediately (sends now)
+  const handleProcessQueueNow = useCallback(() => {
+    const nextMsg = processNextMessage();
+    if (nextMsg) {
+      // Set the input to the queued message and it will be sent
+      setInput(nextMsg.content);
+    }
+  }, [processNextMessage, setInput]);
+
+  // When session completes processing, check if there are queued messages
+  useEffect(() => {
+    if (!isLoading && messageQueueLength > 0) {
+      // Process the next queued message
+      const nextMsg = processNextMessage();
+      if (nextMsg) {
+        // Set the input and trigger submit
+        setInput(nextMsg.content);
+        // Manually trigger submit after state update
+        setTimeout(() => {
+          const form = document.querySelector('form');
+          if (form) {
+            form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+          }
+        }, 100);
+      }
+    }
+  }, [isLoading, messageQueueLength, processNextMessage, setInput]);
 
   // On WebSocket reconnect, re-fetch the current session's messages from the server
   // so missed streaming events are shown. Also reset isLoading.
@@ -441,6 +492,9 @@ function ChatInterface({
             }
           }}
           hasActiveSession={isLoading || Boolean(claudeStatus?.can_interrupt)}
+          messageQueue={messageQueue}
+          onQueueMessage={handleQueueMessage}
+          onProcessQueueNow={handleProcessQueueNow}
         />
       </div>
 

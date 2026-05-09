@@ -11,9 +11,10 @@ import type {
   SetStateAction,
   TouchEvent,
 } from 'react';
-import { ImageIcon, MessageSquareIcon, XIcon, ArrowDownIcon } from 'lucide-react';
+import { ImageIcon, MessageSquareIcon, XIcon, ArrowDownIcon, ListPlusIcon, SendIcon } from 'lucide-react';
 import type { PendingPermissionRequest, PermissionMode, Provider } from '../../types/types';
 import type { LLMProvider } from '../../../types/app';
+import type { QueuedMessage } from '../../hooks/useMessageQueue';
 import CommandMenu from './CommandMenu';
 import ClaudeStatus from './ClaudeStatus';
 import ImageAttachment from './ImageAttachment';
@@ -107,6 +108,10 @@ interface ChatComposerProps {
   currentModel: string;
   onModelChange: (model: string) => void;
   hasActiveSession?: boolean;
+  // Message queue
+  messageQueue: QueuedMessage[];
+  onQueueMessage: (content: string, images: unknown[]) => void;
+  onProcessQueueNow: () => void;
 }
 
 export default function ChatComposer({
@@ -165,6 +170,9 @@ export default function ChatComposer({
   currentModel,
   onModelChange,
   hasActiveSession = false,
+  messageQueue = [],
+  onQueueMessage,
+  onProcessQueueNow,
 }: ChatComposerProps) {
   const { t } = useTranslation('chat');
   const textareaRect = textareaRef.current?.getBoundingClientRect();
@@ -407,6 +415,13 @@ export default function ChatComposer({
           </PromptInputTools>
 
           <div className="flex items-center gap-2">
+            {/* Show queue count if there are queued messages */}
+            {messageQueue.length > 0 && (
+              <div className="flex items-center gap-1 rounded-md bg-amber-100 px-2 py-1 text-xs font-medium text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">
+                <ListPlusIcon className="h-3 w-3" />
+                <span>{messageQueue.length} {t('input.queued', { defaultValue: 'queued' })}</span>
+              </div>
+            )}
             <div
               className={`hidden text-xs text-muted-foreground/50 transition-opacity duration-200 lg:block ${
                 input.trim() ? 'opacity-0' : 'opacity-100'
@@ -414,18 +429,51 @@ export default function ChatComposer({
             >
               {sendByCtrlEnter ? t('input.hintText.ctrlEnter') : t('input.hintText.enter')}
             </div>
-            <PromptInputSubmit
-              disabled={!input.trim() || isLoading}
-              className="h-10 w-10 sm:h-10 sm:w-10"
-              onMouseDown={(event) => {
-                event.preventDefault();
-                onSubmit(event as unknown as MouseEvent<HTMLButtonElement>);
-              }}
-              onTouchStart={(event) => {
-                event.preventDefault();
-                onSubmit(event as unknown as TouchEvent<HTMLButtonElement>);
-              }}
-            />
+
+            {/* When session is active, show queue button */}
+            {hasActiveSession ? (
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  disabled={!input.trim()}
+                  onClick={() => {
+                    onQueueMessage(input.trim(), attachedImages);
+                    onClearInput();
+                  }}
+                  className="flex h-10 items-center gap-1 rounded-lg border border-amber-300/60 bg-amber-50 px-3 text-xs font-medium text-amber-700 transition-colors hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-amber-600/40 dark:bg-amber-900/20 dark:text-amber-300 dark:hover:bg-amber-900/30"
+                  title={t('input.queueMessage', { defaultValue: 'Add to queue (send after current task)' })}
+                >
+                  <ListPlusIcon className="h-4 w-4" />
+                  <span className="hidden sm:inline">{t('input.queue', { defaultValue: 'Queue' })}</span>
+                </button>
+                <button
+                  type="button"
+                  disabled={!input.trim()}
+                  onClick={() => {
+                    onProcessQueueNow();
+                    onSubmit({ preventDefault: () => {} } as FormEvent<HTMLFormElement>);
+                  }}
+                  className="flex h-10 items-center gap-1 rounded-lg border border-blue-300/60 bg-blue-50 px-3 text-xs font-medium text-blue-700 transition-colors hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-blue-600/40 dark:bg-blue-900/20 dark:text-blue-300 dark:hover:bg-blue-900/30"
+                  title={t('input.sendNow', { defaultValue: 'Send now (interrupt current task)' })}
+                >
+                  <SendIcon className="h-4 w-4" />
+                  <span className="hidden sm:inline">{t('input.sendNow', { defaultValue: 'Send Now' })}</span>
+                </button>
+              </div>
+            ) : (
+              <PromptInputSubmit
+                disabled={!input.trim()}
+                className="h-10 w-10 sm:h-10 sm:w-10"
+                onMouseDown={(event) => {
+                  event.preventDefault();
+                  onSubmit(event as unknown as MouseEvent<HTMLButtonElement>);
+                }}
+                onTouchStart={(event) => {
+                  event.preventDefault();
+                  onSubmit(event as unknown as TouchEvent<HTMLButtonElement>);
+                }}
+              />
+            )}
           </div>
         </PromptInputFooter>
       </PromptInput>
