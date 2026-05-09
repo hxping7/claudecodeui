@@ -780,21 +780,4 @@ router.post('/upload-logo', requireAdmin, upload.single('logo'), async (req, res
   }
 });
 
-// Serve logo image
-router.get('/logo/:filename', async (req, res) => {
-  try {
-    const { filename } = req.params;
-    const filePath = path.join(logosDir, filename);
-
-    if (!fs.existsSync(filePath)) {
-      return res.status(404).json({ error: 'Logo not found' });
-    }
-
-    res.sendFile(filePath);
-  } catch (error) {
-    console.error('Error serving logo:', error);
-    res.status(500).json({ error: 'Failed to serve logo' });
-  }
-});
-
 export default router;

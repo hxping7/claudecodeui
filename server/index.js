@@ -155,6 +155,25 @@ app.get('/health', (req, res) => {
 // Optional API key validation (if configured)
 app.use('/api', validateApiKey);
 
+// Public logo endpoint (no authentication required for images)
+// MUST be before the /api/settings authenticated route
+const LOGOS_DIR = path.join(os.homedir(), '.cloudcli', 'logos');
+app.get('/api/settings/logo/:filename', (req, res) => {
+    const { filename } = req.params;
+    const filePath = path.join(LOGOS_DIR, filename);
+
+    // Security: prevent directory traversal
+    if (!filePath.startsWith(LOGOS_DIR)) {
+        return res.status(400).json({ error: 'Invalid path' });
+    }
+
+    if (!fs.existsSync(filePath)) {
+        return res.status(404).json({ error: 'Logo not found' });
+    }
+
+    res.sendFile(filePath);
+});
+
 // Authentication routes (public)
 app.use('/api/auth', authRoutes);
 
