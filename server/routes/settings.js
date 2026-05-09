@@ -719,6 +719,7 @@ const DEFAULT_UI_CONFIG = {
   showSettingsPlugins: true,
   showSettingsNotifications: true,
   showSettingsAbout: true,
+  allowedProviders: ['claude', 'cursor', 'codex', 'gemini'],
 };
 
 // Get UI configuration
@@ -751,10 +752,22 @@ router.put('/ui-config', requireAdmin, async (req, res) => {
       showSettingsPlugins,
       showSettingsNotifications,
       showSettingsAbout,
+      allowedProviders,
     } = req.body;
 
     const currentConfigValue = appConfigDb.get('ui_config');
     const currentConfig = currentConfigValue ? JSON.parse(currentConfigValue) : DEFAULT_UI_CONFIG;
+
+    // Validate allowedProviders if provided
+    let validatedProviders = currentConfig.allowedProviders;
+    if (Array.isArray(allowedProviders)) {
+      const validProviders = ['claude', 'cursor', 'codex', 'gemini'];
+      validatedProviders = allowedProviders.filter(p => validProviders.includes(p));
+      // Ensure at least one provider is allowed
+      if (validatedProviders.length === 0) {
+        validatedProviders = ['claude'];
+      }
+    }
 
     const newConfig = {
       appName: typeof appName === 'string' ? appName : currentConfig.appName,
@@ -771,6 +784,7 @@ router.put('/ui-config', requireAdmin, async (req, res) => {
       showSettingsPlugins: typeof showSettingsPlugins === 'boolean' ? showSettingsPlugins : currentConfig.showSettingsPlugins,
       showSettingsNotifications: typeof showSettingsNotifications === 'boolean' ? showSettingsNotifications : currentConfig.showSettingsNotifications,
       showSettingsAbout: typeof showSettingsAbout === 'boolean' ? showSettingsAbout : currentConfig.showSettingsAbout,
+      allowedProviders: validatedProviders,
     };
 
     appConfigDb.set('ui_config', JSON.stringify(newConfig));

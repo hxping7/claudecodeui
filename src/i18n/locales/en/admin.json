@@ -59,6 +59,8 @@
     "showSettingsPlugins": "Show 'Plugins' tab",
     "showSettingsNotifications": "Show 'Notifications' tab",
     "showSettingsAbout": "Show 'About' tab",
+    "allowedProviders": "Allowed AI Providers",
+    "allowedProvidersDescription": "Control which AI providers users can select in the provider dropdown. At least one provider must be enabled.",
     "save": "Save Changes",
     "saving": "Saving...",
     "saved": "Settings saved successfully",

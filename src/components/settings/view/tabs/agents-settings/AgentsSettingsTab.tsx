@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 
 import { useServerPlatform } from '../../../../../hooks/useServerPlatform';
 import { useVisibleProviders } from '../../../../../hooks/useVisibleProviders';
+import { useUIConfig } from '../../../../../contexts/UIConfigContext';
 import type { AgentCategory, AgentProvider } from '../../../types/types';
 
 import type { AgentContext, AgentsSettingsTabProps } from './types';
@@ -34,20 +35,27 @@ export default function AgentsSettingsTab({
   const [selectedAgent, setSelectedAgent] = useState<AgentProvider>('claude');
   const [selectedCategory, setSelectedCategory] = useState<AgentCategory>('account');
   const { isWindowsServer } = useServerPlatform();
+  const { config: uiConfig } = useUIConfig();
   const {
     visibleProviders: configuredVisibleProviders,
     isLoading: isLoadingVisibleProviders,
     setVisibleProviders,
   } = useVisibleProviders();
 
-  // All available agents (excluding cursor on Windows server)
+  // Admin-controlled allowed providers
+  const adminAllowedProviders = uiConfig.allowedProviders || ['claude', 'cursor', 'codex', 'gemini'];
+
+  // All available agents (excluding cursor on Windows server, and filtered by admin settings)
   const allAgents = useMemo<AgentProvider[]>(() => {
     const agents: AgentProvider[] = ['claude', 'cursor', 'codex', 'gemini'];
+    // Filter by admin-allowed providers
+    const filtered = agents.filter((id) => adminAllowedProviders.includes(id)) as AgentProvider[];
+    // Exclude cursor on Windows
     if (isWindowsServer) {
-      return agents.filter((id) => id !== 'cursor');
+      return filtered.filter((id) => id !== 'cursor');
     }
-    return agents;
-  }, [isWindowsServer]);
+    return filtered;
+  }, [isWindowsServer, adminAllowedProviders]);
 
   // Agents visible in the selector (filtered by user configuration)
   const visibleAgents = useMemo<AgentProvider[]>(() => {

@@ -19,6 +19,7 @@ interface UIConfig {
   showSettingsPlugins: boolean;
   showSettingsNotifications: boolean;
   showSettingsAbout: boolean;
+  allowedProviders: string[];
 }
 
 const defaultConfig: UIConfig = {
@@ -36,6 +37,14 @@ const defaultConfig: UIConfig = {
   showSettingsPlugins: true,
   showSettingsNotifications: true,
   showSettingsAbout: true,
+  allowedProviders: ['claude', 'cursor', 'codex', 'gemini'],
+};
+
+const PROVIDER_NAMES: Record<string, string> = {
+  claude: 'Claude',
+  cursor: 'Cursor',
+  codex: 'Codex',
+  gemini: 'Gemini',
 };
 
 export default function UISettingsPanel() {
@@ -115,6 +124,25 @@ export default function UISettingsPanel() {
   const handleToggle = (key: keyof UIConfig) => {
     if (typeof config[key] === 'boolean') {
       setConfig(prev => ({ ...prev, [key]: !prev[key] }));
+    }
+  };
+
+  const handleToggleProvider = (provider: string) => {
+    const currentProviders = config.allowedProviders || [];
+    const isCurrentlyAllowed = currentProviders.includes(provider);
+
+    if (isCurrentlyAllowed) {
+      // Don't allow removing the last provider
+      if (currentProviders.length <= 1) return;
+      setConfig(prev => ({
+        ...prev,
+        allowedProviders: currentProviders.filter(p => p !== provider)
+      }));
+    } else {
+      setConfig(prev => ({
+        ...prev,
+        allowedProviders: [...currentProviders, provider]
+      }));
     }
   };
 
@@ -288,6 +316,43 @@ export default function UISettingsPanel() {
               </button>
             </label>
           ))}
+        </div>
+      </div>
+
+      {/* Allowed Providers Section */}
+      <div className="bg-card rounded-lg border p-6 space-y-6">
+        <h3 className="text-lg font-semibold">{t('uiSettings.allowedProviders')}</h3>
+        <p className="text-sm text-muted-foreground">{t('uiSettings.allowedProvidersDescription')}</p>
+
+        <div className="space-y-3">
+          {['claude', 'cursor', 'codex', 'gemini'].map((provider) => {
+            const isAllowed = (config.allowedProviders || ['claude', 'cursor', 'codex', 'gemini']).includes(provider);
+            const isOnlyAllowed = (config.allowedProviders?.length || 4) === 1 && isAllowed;
+
+            return (
+              <label
+                key={provider}
+                className={`flex items-center justify-between p-3 rounded-lg hover:bg-muted/50 ${
+                  isOnlyAllowed ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'
+                }`}
+              >
+                <span className="font-medium">{PROVIDER_NAMES[provider]}</span>
+                <button
+                  onClick={() => !isOnlyAllowed && handleToggleProvider(provider)}
+                  disabled={isOnlyAllowed}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                    isAllowed ? 'bg-primary' : 'bg-muted'
+                  }`}
+                >
+                  <span
+                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                      isAllowed ? 'translate-x-6' : 'translate-x-1'
+                    }`}
+                  />
+                </button>
+              </label>
+            );
+          })}
         </div>
       </div>
     </div>

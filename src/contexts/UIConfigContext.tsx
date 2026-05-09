@@ -17,6 +17,8 @@ export interface UIConfig {
   showSettingsPlugins: boolean;
   showSettingsNotifications: boolean;
   showSettingsAbout: boolean;
+  // Admin-controlled allowed providers (users can only see/select from these)
+  allowedProviders: string[];
 }
 
 const defaultConfig: UIConfig = {
@@ -34,6 +36,7 @@ const defaultConfig: UIConfig = {
   showSettingsPlugins: true,
   showSettingsNotifications: true,
   showSettingsAbout: true,
+  allowedProviders: ['claude', 'cursor', 'codex', 'gemini'],
 };
 
 type UIConfigContextType = {

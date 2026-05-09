@@ -59,6 +59,8 @@
     "showSettingsPlugins": "显示「插件」选项卡",
     "showSettingsNotifications": "显示「通知」选项卡",
     "showSettingsAbout": "显示「关于」选项卡",
+    "allowedProviders": "允许的 AI 提供商",
+    "allowedProvidersDescription": "控制用户可以在提供商下拉菜单中选择哪些 AI 提供商。至少需要启用一个提供商。",
     "save": "保存更改",
     "saving": "保存中...",
     "saved": "设置保存成功",
