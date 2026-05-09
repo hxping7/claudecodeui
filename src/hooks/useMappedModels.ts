@@ -42,11 +42,12 @@ export function useMappedModels() {
       const response = await fetch('/api/public/models');
       const data = await response.json();
       if (data.success && data.models) {
+        // API returns arrays directly, wrap them with models property
         setMappedModels({
-          claude: data.models.claude || { models: [] },
-          cursor: data.models.cursor || { models: [] },
-          codex: data.models.codex || { models: [] },
-          gemini: data.models.gemini || { models: [] },
+          claude: { models: data.models.claude || [] },
+          cursor: { models: data.models.cursor || [] },
+          codex: { models: data.models.codex || [] },
+          gemini: { models: data.models.gemini || [] },
         });
       }
     } catch (error) {
