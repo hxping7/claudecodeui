@@ -3,7 +3,7 @@ import bcrypt from 'bcrypt';
 import { userDb, appConfigDb } from '../modules/database/index.js';
 import { getConnection } from '../modules/database/connection.js';
 import { generateToken, authenticateToken } from '../middleware/auth.js';
-import { getLinuxUserInfo, getUserWorkspace } from '../modules/auth/linux-pam-auth.js';
+import { getLinuxUserInfo, authenticateWithLinux } from '../modules/auth/linux-pam-auth.js';
 
 const router = express.Router();
 const db = getConnection();
@@ -97,10 +97,9 @@ router.post('/login', async (req, res) => {
     const authMode = getAuthMode();
 
     if (authMode === 'linux') {
-      // Linux PAM authentication mode
-      // Verify user exists in Linux system
-      const linuxUser = await getLinuxUserInfo(username);
-      if (!linuxUser) {
+      // Linux PAM authentication mode - verify password via PAM
+      const authResult = await authenticateWithLinux(username, password);
+      if (!authResult.success) {
         return res.status(401).json({ error: 'Invalid username or password' });
       }
 
@@ -114,22 +113,19 @@ router.post('/login', async (req, res) => {
       // Generate token with Linux user info
       const token = generateToken({
         ...user,
-        homeDir: linuxUser.homeDir,
-        uid: linuxUser.uid,
-        gid: linuxUser.gid,
+        homeDir: authResult.homeDir,
+        uid: authResult.uid,
+        gid: authResult.gid,
       });
 
       // Update last login
       userDb.updateLastLogin(user.id);
 
-      // Get user's workspace based on auth mode
-      const workspaceRoot = await getUserWorkspace(username, 'linux');
-
       res.json({
         success: true,
         user: { id: user.id, username: user.username, role: user.role || 'user' },
         token,
-        workspaceRoot,
+        workspaceRoot: authResult.homeDir,
         authMode: 'linux'
       });
       return;

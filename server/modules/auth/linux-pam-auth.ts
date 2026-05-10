@@ -1,5 +1,6 @@
 import { exec } from 'child_process';
 import { promisify } from 'util';
+import { randomBytes } from 'crypto';
 
 const execAsync = promisify(exec);
 
@@ -8,15 +9,13 @@ const execAsync = promisify(exec);
  *
  * Supports two authentication modes:
  * - 'database': Use internal database (default)
- * - 'linux': Use Linux system users with getent
+ * - 'linux': Use Linux system users with PAM password verification
  */
 
 export type AuthMode = 'database' | 'linux';
 
 /**
  * Check if a Linux user exists on the system
- * @param username - The username to check
- * @returns Promise<{exists: boolean, homeDir: string, uid: number, gid: number}>
  */
 export async function getLinuxUserInfo(username: string): Promise<{
   exists: boolean;
@@ -43,38 +42,55 @@ export async function getLinuxUserInfo(username: string): Promise<{
       uid: parseInt(parts[2], 10),
       gid: parseInt(parts[3], 10),
     };
-  } catch (error) {
-    // User not found
+  } catch {
     return null;
   }
 }
 
 /**
- * Validate Linux user credentials using PAM
- * Note: This is a simplified version that checks if user exists
- * For full password verification, a proper PAM module would be needed
- *
- * @param username - The username
- * @param password - The password (optional, for future use)
- * @returns Promise<boolean>
+ * Validate Linux user credentials using PAM via su command
+ * Requires the server to run as root or have sudo access
  */
-export async function authenticateWithLinux(username: string, _password?: string): Promise<boolean> {
+export async function authenticateWithLinux(username: string, password: string): Promise<{
+  success: boolean;
+  homeDir?: string;
+  uid?: number;
+  gid?: number;
+  error?: string;
+}> {
+  // First check if user exists
   const userInfo = await getLinuxUserInfo(username);
-  return userInfo !== null;
-}
+  if (!userInfo) {
+    return { success: false, error: 'User not found' };
+  }
 
-/**
- * Get the authentication mode from app config
- */
-export function getAuthMode(): AuthMode {
-  // This will be read from appConfigDb in the actual implementation
-  return process.env.AUTH_MODE as AuthMode || 'database';
+  try {
+    // Use su to validate password - performs real PAM authentication
+    const verifyToken = randomBytes(8).toString('hex');
+    const cmd = `echo '${password.replace(/'/g, "'\\''")}' | su - ${username} -c "echo '${verifyToken}'" 2>/dev/null`;
+
+    const { stdout } = await execAsync(cmd, {
+      encoding: 'utf8',
+      timeout: 10000,
+    });
+
+    if (stdout.trim() === verifyToken) {
+      return {
+        success: true,
+        homeDir: userInfo.homeDir,
+        uid: userInfo.uid,
+        gid: userInfo.gid,
+      };
+    }
+
+    return { success: false, error: 'Invalid password' };
+  } catch {
+    return { success: false, error: 'Authentication failed' };
+  }
 }
 
 /**
  * Get user's workspace directory based on auth mode
- * - For Linux auth: use user's home directory
- * - For database auth: use shared workspaces root
  */
 export async function getUserWorkspace(username: string, authMode: AuthMode): Promise<string> {
   if (authMode === 'linux') {
@@ -84,7 +100,5 @@ export async function getUserWorkspace(username: string, authMode: AuthMode): Pr
     }
   }
 
-  // Fall back to shared workspaces directory
-  // This would be configured in app settings
   return process.env.WORKSPACES_ROOT || '/home';
 }
