@@ -90,6 +90,7 @@
   "mainTabs": {
     "label": "Settings",
     "agents": "Agents",
+    "auth": "Authentication",
     "appearance": "Appearance",
     "git": "Git",
     "apiTokens": "API & Tokens",
@@ -97,6 +98,20 @@
     "notifications": "Notifications",
     "plugins": "Plugins",
     "about": "About"
+  },
+  "auth": {
+    "title": "Authentication",
+    "description": "Configure how users authenticate to this application.",
+    "mode": "Authentication Mode",
+    "databaseMode": "Database Authentication",
+    "databaseModeDesc": "Users are stored in the application's database with encrypted passwords.",
+    "linuxMode": "Linux PAM Authentication",
+    "linuxModeDesc": "Users authenticate using their Linux system credentials (PAM).",
+    "saveSuccess": "Settings saved successfully.",
+    "saving": "Saving...",
+    "infoTitle": "About Authentication Modes",
+    "infoDatabase": "Database mode: Users must be manually registered by an admin.",
+    "infoLinux": "Linux PAM mode: Users log in with their existing Linux username and password. Each user gets their home directory as workspace."
   },
   "notifications": {
     "title": "Notifications",

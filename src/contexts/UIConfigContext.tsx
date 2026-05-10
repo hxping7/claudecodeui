@@ -12,6 +12,7 @@ export interface UIConfig {
   showVersion: boolean;
   // Settings menu visibility
   showSettingsAgents: boolean;
+  showSettingsAuth: boolean;
   showSettingsAppearance: boolean;
   showSettingsGit: boolean;
   showSettingsApi: boolean;
@@ -31,6 +32,7 @@ const defaultConfig: UIConfig = {
   showGitHubStar: true,
   showVersion: true,
   showSettingsAgents: true,
+  showSettingsAuth: true,
   showSettingsAppearance: true,
   showSettingsGit: true,
   showSettingsApi: true,

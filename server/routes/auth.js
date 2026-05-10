@@ -1,11 +1,17 @@
 import express from 'express';
 import bcrypt from 'bcrypt';
-import { userDb } from '../modules/database/index.js';
+import { userDb, appConfigDb } from '../modules/database/index.js';
 import { getConnection } from '../modules/database/connection.js';
 import { generateToken, authenticateToken } from '../middleware/auth.js';
+import { getLinuxUserInfo, getUserWorkspace } from '../modules/auth/linux-pam-auth.js';
 
 const router = express.Router();
 const db = getConnection();
+
+// Get current auth mode
+function getAuthMode() {
+  return appConfigDb.get('auth_mode') || 'database';
+}
 
 // Check auth status and setup requirements
 router.get('/status', async (req, res) => {
@@ -82,24 +88,66 @@ router.post('/register', async (req, res) => {
 router.post('/login', async (req, res) => {
   try {
     const { username, password } = req.body;
-    
+
     // Validate input
     if (!username || !password) {
       return res.status(400).json({ error: 'Username and password are required' });
     }
-    
+
+    const authMode = getAuthMode();
+
+    if (authMode === 'linux') {
+      // Linux PAM authentication mode
+      // Verify user exists in Linux system
+      const linuxUser = await getLinuxUserInfo(username);
+      if (!linuxUser) {
+        return res.status(401).json({ error: 'Invalid username or password' });
+      }
+
+      // Get or create user in database (auto-provisioning)
+      let user = userDb.getUserByUsername(username);
+      if (!user) {
+        // Auto-create user with 'user' role and placeholder password (not used for Linux auth)
+        user = userDb.createUser(username, 'PAM_AUTH_PLACEHOLDER', 'user');
+      }
+
+      // Generate token with Linux user info
+      const token = generateToken({
+        ...user,
+        homeDir: linuxUser.homeDir,
+        uid: linuxUser.uid,
+        gid: linuxUser.gid,
+      });
+
+      // Update last login
+      userDb.updateLastLogin(user.id);
+
+      // Get user's workspace based on auth mode
+      const workspaceRoot = await getUserWorkspace(username, 'linux');
+
+      res.json({
+        success: true,
+        user: { id: user.id, username: user.username, role: user.role || 'user' },
+        token,
+        workspaceRoot,
+        authMode: 'linux'
+      });
+      return;
+    }
+
+    // Database authentication mode (default)
     // Get user from database
     const user = userDb.getUserByUsername(username);
     if (!user) {
       return res.status(401).json({ error: 'Invalid username or password' });
     }
-    
+
     // Verify password
     const isValidPassword = await bcrypt.compare(password, user.password_hash);
     if (!isValidPassword) {
       return res.status(401).json({ error: 'Invalid username or password' });
     }
-    
+
     // Generate token
     const token = generateToken(user);
 
@@ -111,7 +159,7 @@ router.post('/login', async (req, res) => {
       user: { id: user.id, username: user.username, role: user.role || 'user' },
       token
     });
-    
+
   } catch (error) {
     console.error('Login error:', error);
     res.status(500).json({ error: 'Internal server error' });

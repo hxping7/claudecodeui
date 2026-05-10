@@ -344,6 +344,35 @@ router.get('/visible-providers', authenticateToken, async (req, res) => {
   }
 });
 
+// Get authentication mode configuration
+router.get('/auth-mode', authenticateToken, async (req, res) => {
+  try {
+    const configValue = appConfigDb.get('auth_mode');
+    const authMode = configValue || 'database';
+    res.json({ success: true, authMode });
+  } catch (error) {
+    console.error('Error fetching auth mode:', error);
+    res.status(500).json({ error: 'Failed to fetch auth mode' });
+  }
+});
+
+// Update authentication mode configuration
+router.put('/auth-mode', requireAdmin, async (req, res) => {
+  try {
+    const { authMode } = req.body;
+
+    if (!authMode || !['database', 'linux'].includes(authMode)) {
+      return res.status(400).json({ error: 'authMode must be "database" or "linux"' });
+    }
+
+    appConfigDb.set('auth_mode', authMode);
+    res.json({ success: true, authMode });
+  } catch (error) {
+    console.error('Error saving auth mode:', error);
+    res.status(500).json({ error: 'Failed to save auth mode' });
+  }
+});
+
 // Update visible providers configuration
 router.put('/visible-providers', async (req, res) => {
   try {
