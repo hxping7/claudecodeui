@@ -2,8 +2,9 @@ import { useState, useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAdminUsers } from '../../../hooks/useAdmin';
 import { useAuth } from '../../auth/context/AuthContext';
+import { authenticatedFetch } from '../../../utils/api';
 import { Button } from '../../../shared/view/ui';
-import { Users, UserPlus, Shield, ShieldOff, Trash2, Key } from 'lucide-react';
+import { Users, UserPlus, Shield, ShieldOff, Trash2, Key, Info } from 'lucide-react';
 
 export default function UserManagement() {
   const { t } = useTranslation('admin');
@@ -18,6 +19,29 @@ export default function UserManagement() {
     resetPassword,
     toggleUser,
   } = useAdminUsers();
+
+  const [authMode, setAuthMode] = useState<'database' | 'linux'>('database');
+  const [isLoadingAuthMode, setIsLoadingAuthMode] = useState(true);
+
+  // Fetch auth mode on mount
+  useEffect(() => {
+    const fetchAuthMode = async () => {
+      try {
+        const response = await authenticatedFetch('/api/settings/auth-mode', { method: 'GET' });
+        if (response.ok) {
+          const data = await response.json();
+          setAuthMode(data.authMode || 'database');
+        }
+      } catch (err) {
+        console.error('Failed to fetch auth mode:', err);
+      } finally {
+        setIsLoadingAuthMode(false);
+      }
+    };
+    fetchAuthMode();
+  }, []);
+
+  const isPamMode = authMode === 'linux';
 
   // Count admins to prevent deleting/disabling the last admin
   const adminCount = useMemo(() => users.filter(u => u.role === 'admin').length, [users]);
@@ -79,11 +103,29 @@ export default function UserManagement() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-semibold">{t('users.title')}</h2>
-        <Button onClick={() => setShowCreateModal(true)}>
+        <Button onClick={() => setShowCreateModal(true)} disabled={isPamMode || isLoadingAuthMode}>
           <UserPlus className="mr-2 h-4 w-4" />
           {t('users.createUser')}
         </Button>
       </div>
+
+      {/* Loading state */}
+      {(isLoading || isLoadingAuthMode) && (
+        <div className="flex items-center justify-center p-8">
+          <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+        </div>
+      )}
+
+      {/* PAM Mode Warning */}
+      {isPamMode && !isLoadingAuthMode && (
+        <div className="flex items-start gap-3 rounded-lg bg-blue-500/10 p-4 text-sm text-blue-600 dark:text-blue-400">
+          <Info className="mt-0.5 h-5 w-5 flex-shrink-0" />
+          <div>
+            <p className="font-medium">{t('users.pamModeTitle')}</p>
+            <p className="mt-1 text-muted-foreground">{t('users.pamModeDesc')}</p>
+          </div>
+        </div>
+      )}
 
       {error && (
         <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
@@ -153,6 +195,7 @@ export default function UserManagement() {
                       size="sm"
                       onClick={() => setShowResetModal(user.id)}
                       title={t('users.resetPassword')}
+                      disabled={isPamMode}
                     >
                       <Key className="h-4 w-4" />
                     </Button>
@@ -165,7 +208,7 @@ export default function UserManagement() {
                           ? t('users.cannotDisableLastAdmin', { defaultValue: 'Cannot disable the last admin' })
                           : (user.is_active ? t('users.inactive') : t('users.active'))
                       }
-                      disabled={user.role === 'admin' && user.is_active && adminCount === 1}
+                      disabled={user.role === 'admin' && user.is_active && adminCount === 1 || isPamMode}
                       className={user.role === 'admin' && user.is_active && adminCount === 1 ? 'opacity-50' : ''}
                     >
                       {user.is_active ? (
@@ -184,7 +227,7 @@ export default function UserManagement() {
                           : t('users.deleteUser')
                       }
                       className={`text-destructive hover:text-destructive ${user.role === 'admin' && adminCount === 1 ? 'opacity-50' : ''}`}
-                      disabled={user.role === 'admin' && adminCount === 1}
+                      disabled={user.role === 'admin' && adminCount === 1 || isPamMode}
                     >
                       <Trash2 className="h-4 w-4" />
                     </Button>
