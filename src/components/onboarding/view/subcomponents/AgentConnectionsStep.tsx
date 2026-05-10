@@ -1,6 +1,7 @@
 import type { LLMProvider } from '../../../../types/app';
 import type { ProviderAuthStatusMap } from '../../../provider-auth/types';
 import AgentConnectionCard from './AgentConnectionCard';
+import { useVisibleProviders } from '../../../../hooks/useVisibleProviders';
 
 type AgentConnectionsStepProps = {
   providerStatuses: ProviderAuthStatusMap;
@@ -42,6 +43,13 @@ export default function AgentConnectionsStep({
   providerStatuses,
   onOpenProviderLogin,
 }: AgentConnectionsStepProps) {
+  const { visibleProviders } = useVisibleProviders();
+
+  // Filter provider cards based on admin configuration
+  const visibleProviderCards = providerCards.filter(card =>
+    visibleProviders.includes(card.provider as never)
+  );
+
   return (
     <div className="space-y-6">
       <div className="mb-6 text-center">
@@ -52,7 +60,7 @@ export default function AgentConnectionsStep({
       </div>
 
       <div className="space-y-3">
-        {providerCards.map((providerCard) => (
+        {visibleProviderCards.map((providerCard) => (
           <AgentConnectionCard
             key={providerCard.provider}
             provider={providerCard.provider}
