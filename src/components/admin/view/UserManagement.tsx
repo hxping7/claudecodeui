@@ -208,7 +208,7 @@ export default function UserManagement() {
                           ? t('users.cannotDisableLastAdmin', { defaultValue: 'Cannot disable the last admin' })
                           : (user.is_active ? t('users.inactive') : t('users.active'))
                       }
-                      disabled={user.role === 'admin' && user.is_active && adminCount === 1 || isPamMode}
+                      disabled={user.role === 'admin' && user.is_active && adminCount === 1}
                       className={user.role === 'admin' && user.is_active && adminCount === 1 ? 'opacity-50' : ''}
                     >
                       {user.is_active ? (

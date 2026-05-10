@@ -111,8 +111,13 @@ router.post('/login', async (req, res) => {
         const isAdmin = adminUsers.includes(username.toLowerCase());
         const role = isAdmin ? 'admin' : 'user';
 
-        // Auto-create user with appropriate role
+        // Auto-create user with appropriate role, default enabled
         user = userDb.createUser(username, 'PAM_AUTH_PLACEHOLDER', role);
+      }
+
+      // Check if user is disabled (works for both Database and PAM mode)
+      if (user.is_active === 0 || user.is_active === false) {
+        return res.status(401).json({ error: 'Account is disabled. Contact admin.' });
       }
 
       // Generate token with Linux user info

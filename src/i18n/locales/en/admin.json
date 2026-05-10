@@ -30,7 +30,7 @@
     "cannotDisableLastAdmin": "Cannot disable the last admin",
     "cannotDeleteLastAdmin": "Cannot delete the last admin",
     "pamModeTitle": "Linux PAM Authentication Active",
-    "pamModeDesc": "Users are managed by the Linux system. Users are automatically created on first login. You can only view users and configure admin users list in Authentication settings."
+    "pamModeDesc": "Users are managed by the Linux system. Users are automatically created on first login. You can enable/disable users but cannot delete them. To add admins, configure in Authentication settings."
   },
   "sidebar": {
     "backToFrontend": "Back to Frontend",
