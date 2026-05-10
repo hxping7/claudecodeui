@@ -7,6 +7,7 @@ import { apiKeysDb, credentialsDb, notificationPreferencesDb, pushSubscriptionsD
 import { getPublicKey } from '../services/vapid-keys.js';
 import { createNotificationEvent, notifyUserIfEnabled } from '../services/notification-orchestrator.js';
 import { requireAdmin } from '../middleware/admin.js';
+import { authenticateToken } from '../middleware/auth.js';
 
 const router = express.Router();
 
@@ -332,7 +333,7 @@ router.get('/server-env', async (req, res) => {
 // ===============================
 
 // Get visible providers configuration
-router.get('/visible-providers', async (req, res) => {
+router.get('/visible-providers', authenticateToken, async (req, res) => {
   try {
     const configValue = appConfigDb.get('visible_providers');
     const visibleProviders = configValue ? JSON.parse(configValue) : DEFAULT_VISIBLE_PROVIDERS;
