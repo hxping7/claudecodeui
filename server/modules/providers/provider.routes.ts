@@ -316,7 +316,7 @@ router.delete(
   asyncHandler(async (req: Request, res: Response) => {
     const sessionId = parseSessionId(req.params.sessionId);
     const deletedFromDisk = parseOptionalBooleanQuery(req.query.deletedFromDisk, 'deletedFromDisk') ?? false;
-    const result = await sessionsService.deleteSessionById(sessionId, deletedFromDisk);
+    const result = await sessionsService.deleteSessionById(sessionId, deletedFromDisk, req.user.id);
     res.json(createApiSuccessResponse(result));
   }),
 );
@@ -326,7 +326,7 @@ router.put(
   asyncHandler(async (req: Request, res: Response) => {
     const sessionId = parseSessionId(req.params.sessionId);
     const summary = parseSessionRenameSummary(req.body);
-    const result = sessionsService.renameSessionById(sessionId, summary);
+    const result = sessionsService.renameSessionById(sessionId, summary, req.user.id);
     res.json(createApiSuccessResponse(result));
   }),
 );
@@ -365,7 +365,7 @@ router.get(
     const result = await sessionsService.fetchHistory(sessionId, {
       limit,
       offset,
-    });
+    }, req.user.id);
     res.json(result);
   }),
 );
@@ -393,6 +393,7 @@ router.get('/search/sessions', asyncHandler(async (req: Request, res: Response) 
       query,
       limit,
       signal: abortController.signal,
+      userId: req.user.id,
       onProgress: ({ projectResult, totalMatches, scannedProjects, totalProjects }) => {
         if (closed) {
           return;

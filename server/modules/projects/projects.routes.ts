@@ -1,5 +1,6 @@
 import express from 'express';
 
+import { projectsDb } from '@/modules/database/index.js';
 import { createProject, updateProjectDisplayName } from '@/modules/projects/services/project-management.service.js';
 import { startCloneProject } from '@/modules/projects/services/project-clone.service.js';
 import { getProjectTaskMaster } from '@/modules/projects/services/projects-has-taskmaster.service.js';
@@ -81,7 +82,7 @@ router.get(
     const projectId = typeof req.params.projectId === 'string' ? req.params.projectId : '';
     const limit = parseNonNegativeIntQuery(req.query.limit, 'limit', 20);
     const offset = parseNonNegativeIntQuery(req.query.offset, 'offset', 0);
-    const sessionsPage = await getProjectSessionsPage(projectId, { limit, offset });
+    const sessionsPage = await getProjectSessionsPage(projectId, { limit, offset }, req.user.id);
     res.json(sessionsPage);
   }),
 );
@@ -217,6 +218,11 @@ router.put('/:projectId/rename', (req, res) => {
   try {
     const projectId = typeof req.params.projectId === 'string' ? req.params.projectId : '';
     const { displayName } = req.body as { displayName?: unknown };
+    // Verify ownership
+    if (!projectsDb.getProjectByIdAndUserId(req.user.id, projectId)) {
+      res.status(404).json({ error: 'Project not found or access denied' });
+      return;
+    }
     updateProjectDisplayName(projectId, displayName);
     res.json({ success: true });
   } catch (error) {
@@ -228,6 +234,11 @@ router.post(
   '/:projectId/toggle-star',
   asyncHandler(async (req, res) => {
     const projectId = typeof req.params.projectId === 'string' ? req.params.projectId : '';
+    // Verify ownership
+    if (!projectsDb.getProjectByIdAndUserId(req.user.id, projectId)) {
+      res.status(404).json({ error: 'Project not found or access denied' });
+      return;
+    }
     const { isStarred } = toggleProjectStar(projectId);
     res.json({ success: true, isStarred });
   }),
@@ -241,6 +252,11 @@ router.delete(
   '/:projectId',
   asyncHandler(async (req, res) => {
     const projectId = typeof req.params.projectId === 'string' ? req.params.projectId : '';
+    // Verify ownership
+    if (!projectsDb.getProjectByIdAndUserId(req.user.id, projectId)) {
+      res.status(404).json({ error: 'Project not found or access denied' });
+      return;
+    }
     const force = req.query.force === 'true';
     await deleteOrArchiveProject(projectId, force);
     res.json({ success: true });

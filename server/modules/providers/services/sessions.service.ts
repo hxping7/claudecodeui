@@ -27,6 +27,29 @@ async function removeFileIfExists(filePath: string): Promise<boolean> {
 }
 
 /**
+ * Verifies that the session belongs to the given user.
+ * Allows access to sessions without user_id (legacy data) for backwards compatibility.
+ * @throws AppError if session not found or doesn't belong to user
+ */
+function verifySessionOwnership(sessionId: string, userId: number): void {
+  const session = sessionsDb.getSessionById(sessionId);
+  if (!session) {
+    throw new AppError(`Session "${sessionId}" was not found.`, {
+      code: 'SESSION_NOT_FOUND',
+      statusCode: 404,
+    });
+  }
+  // Allow access to legacy sessions without user_id
+  if (session.user_id !== undefined && session.user_id !== userId) {
+    // Return generic "not found" to avoid revealing session existence
+    throw new AppError(`Session "${sessionId}" was not found.`, {
+      code: 'SESSION_NOT_FOUND',
+      statusCode: 404,
+    });
+  }
+}
+
+/**
  * Application service for provider-backed session message operations.
  *
  * Callers pass a provider id and this service resolves the concrete provider
@@ -61,6 +84,7 @@ export const sessionsService = {
   fetchHistory(
     sessionId: string,
     options: Pick<FetchHistoryOptions, 'limit' | 'offset'> = {},
+    userId?: number,
   ): Promise<FetchHistoryResult> {
     const session = sessionsDb.getSessionById(sessionId);
 
@@ -68,6 +92,18 @@ export const sessionsService = {
       // Session may still be streaming — the file-system watcher hasn't
       // indexed it yet.  Return an empty result instead of 404 so the
       // frontend can fall back to realtime WebSocket messages.
+      return Promise.resolve({
+        messages: [],
+        total: 0,
+        hasMore: false,
+        offset: 0,
+        limit: options.limit ?? null,
+        tokenUsage: null,
+      } satisfies FetchHistoryResult);
+    }
+
+    // Verify ownership if userId provided - allow legacy sessions without user_id
+    if (userId !== undefined && session.user_id !== undefined && session.user_id !== userId) {
       return Promise.resolve({
         messages: [],
         total: 0,
@@ -104,17 +140,15 @@ export const sessionsService = {
   async deleteSessionById(
     sessionId: string,
     deletedFromDisk = false,
+    userId?: number,
   ): Promise<{ sessionId: string; deletedFromDisk: boolean }> {
+    // Verify ownership if userId provided
+    verifySessionOwnership(sessionId, userId as number);
+
     const session = sessionsDb.getSessionById(sessionId);
-    if (!session) {
-      throw new AppError(`Session "${sessionId}" was not found.`, {
-        code: 'SESSION_NOT_FOUND',
-        statusCode: 404,
-      });
-    }
 
     let removedFromDisk = false;
-    if (deletedFromDisk && session.jsonl_path) {
+    if (deletedFromDisk && session?.jsonl_path) {
       removedFromDisk = await removeFileIfExists(session.jsonl_path);
     }
 
@@ -132,7 +166,10 @@ export const sessionsService = {
   /**
    * Renames one session by id without requiring the caller to pass provider.
    */
-  renameSessionById(sessionId: string, summary: string): { sessionId: string; summary: string } {
+  renameSessionById(sessionId: string, summary: string, userId?: number): { sessionId: string; summary: string } {
+    // Verify ownership if userId provided
+    verifySessionOwnership(sessionId, userId as number);
+
     const session = sessionsDb.getSessionById(sessionId);
     if (!session) {
       throw new AppError(`Session "${sessionId}" was not found.`, {

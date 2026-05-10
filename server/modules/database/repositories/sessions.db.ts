@@ -15,7 +15,7 @@ type SessionRow = {
 
 type SessionMetadataLookupRow = Pick<
   SessionRow,
-  'session_id' | 'provider' | 'project_id' | 'jsonl_path' | 'custom_name' | 'created_at' | 'updated_at'
+  'session_id' | 'provider' | 'project_id' | 'jsonl_path' | 'custom_name' | 'created_at' | 'updated_at' | 'user_id'
 >;
 
 function normalizeTimestamp(value?: string): string | null {

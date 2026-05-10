@@ -4,7 +4,7 @@ import path from 'node:path';
 import { projectsDb, sessionsDb } from '@/modules/database/index.js';
 import { sessionSynchronizerService } from '@/modules/providers/index.js';
 import { WS_OPEN_STATE, connectedClients } from '@/modules/websocket/index.js';
-import type { RealtimeClientConnection } from '@/shared/types.js';
+import type { RealtimeClientConnection, ProjectRepositoryRow } from '@/shared/types.js';
 import { AppError } from '@/shared/utils.js';
 
 type SessionSummary = {
@@ -266,17 +266,30 @@ export async function getProjectsWithSessions(
 
 /**
  * Loads one paginated session slice for a specific project id.
+ * Requires userId to verify project ownership.
  */
 export async function getProjectSessionsPage(
   projectId: string,
   options: SessionPaginationOptions = {},
+  userId?: number,
 ): Promise<ProjectSessionsPageApiView> {
-  const projectRow = projectsDb.getProjectById(projectId);
-  if (!projectRow) {
-    throw new AppError(`Project "${projectId}" was not found.`, {
-      code: 'PROJECT_NOT_FOUND',
-      statusCode: 404,
-    });
+  let projectRow: ProjectRepositoryRow | null;
+  if (userId !== undefined) {
+    projectRow = projectsDb.getProjectByIdAndUserId(userId, projectId);
+    if (!projectRow) {
+      throw new AppError(`Project "${projectId}" was not found or access denied.`, {
+        code: 'PROJECT_NOT_FOUND',
+        statusCode: 404,
+      });
+    }
+  } else {
+    projectRow = projectsDb.getProjectById(projectId);
+    if (!projectRow) {
+      throw new AppError(`Project "${projectId}" was not found.`, {
+        code: 'PROJECT_NOT_FOUND',
+        statusCode: 404,
+      });
+    }
   }
 
   const sessionsPage = readProjectSessionsPageById(projectId, options);

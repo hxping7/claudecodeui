@@ -50,6 +50,7 @@ type SearchSessionConversationsInput = {
   limit: number;
   signal?: AbortSignal;
   onProgress?: (update: SessionConversationSearchProgressUpdate) => void;
+  userId?: number; // Filter to only this user's sessions
 };
 
 type SessionRepositoryRow = ReturnType<typeof sessionsDb.getAllSessions>[number];
@@ -1020,6 +1021,7 @@ export async function searchConversations(
   limit = 50,
   onProjectResult: ((update: SessionConversationSearchProgressUpdate) => void) | null = null,
   signal: AbortSignal | null = null,
+  userId?: number,
 ): Promise<{ results: ProjectConversationResult[]; totalMatches: number; query: string }> {
   const safeQuery = typeof query === 'string' ? query.trim() : '';
   const safeLimit = Math.max(1, Math.min(Number.isFinite(limit) ? limit : 50, 200));
@@ -1034,7 +1036,12 @@ export async function searchConversations(
     return { results: [], totalMatches: 0, query: safeQuery };
   }
 
-  const searchableSessions = normalizeSearchableSessions(sessionsDb.getAllSessions());
+  let allSessions = sessionsDb.getAllSessions();
+  // Filter to only user's sessions if userId provided - allow legacy sessions without user_id
+  if (userId !== undefined) {
+    allSessions = allSessions.filter(s => s.user_id === undefined || s.user_id === userId);
+  }
+  const searchableSessions = normalizeSearchableSessions(allSessions);
   if (searchableSessions.length === 0) {
     return { results: [], totalMatches: 0, query: safeQuery };
   }
@@ -1173,6 +1180,7 @@ export const sessionConversationsSearchService = {
       input.limit,
       input.onProgress ?? null,
       input.signal ?? null,
+      input.userId,
     );
   },
 };
