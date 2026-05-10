@@ -467,7 +467,7 @@ export function useChatComposerState({
     ) => {
       event.preventDefault();
       const currentInput = inputValueRef.current;
-      if (!currentInput.trim() || isLoading || !selectedProject) {
+      if (!currentInput.trim() || !selectedProject) {
         return;
       }
 
@@ -711,6 +711,19 @@ export function useChatComposerState({
   useEffect(() => {
     inputValueRef.current = input;
   }, [input]);
+
+  /**
+   * Set input text and trigger submit in one step.
+   * Used by the message queue to auto-send queued messages when a session completes.
+   */
+  const submitWithContent = useCallback((content: string) => {
+    setInput(content);
+    inputValueRef.current = content;
+    // Defer submit so the input state is flushed before handleSubmit reads inputValueRef.
+    setTimeout(() => {
+      handleSubmitRef.current?.(createFakeSubmitEvent());
+    }, 0);
+  }, [setInput]);
 
   useEffect(() => {
     if (!selectedProject) {
@@ -966,6 +979,7 @@ export function useChatComposerState({
     isDragActive,
     openImagePicker: open,
     handleSubmit,
+    submitWithContent,
     handleInputChange,
     handleKeyDown,
     handlePaste,

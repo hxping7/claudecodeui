@@ -38,12 +38,24 @@ export function useMessageQueue(options: MessageQueueOptions = {}) {
     return message.id;
   }, []);
 
+  const clearQueue = useCallback(() => {
+    setQueue([]);
+  }, []);
+
   const removeFromQueue = useCallback((id: string) => {
     setQueue((prev) => prev.filter((msg) => msg.id !== id));
   }, []);
 
-  const clearQueue = useCallback(() => {
-    setQueue([]);
+  const reorderQueue = useCallback((fromIndex: number, toIndex: number) => {
+    setQueue((prev) => {
+      if (fromIndex < 0 || fromIndex >= prev.length || toIndex < 0 || toIndex >= prev.length) {
+        return prev;
+      }
+      const updated = [...prev];
+      const [moved] = updated.splice(fromIndex, 1);
+      updated.splice(toIndex, 0, moved);
+      return updated;
+    });
   }, []);
 
   const processNextMessage = useCallback(() => {
@@ -74,6 +86,7 @@ export function useMessageQueue(options: MessageQueueOptions = {}) {
     isProcessing,
     addToQueue,
     removeFromQueue,
+    reorderQueue,
     clearQueue,
     processNextMessage,
     finishProcessing,

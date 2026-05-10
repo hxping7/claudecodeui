@@ -415,13 +415,6 @@ export default function ChatComposer({
           </PromptInputTools>
 
           <div className="flex items-center gap-2">
-            {/* Show queue count if there are queued messages */}
-            {messageQueue.length > 0 && (
-              <div className="flex items-center gap-1 rounded-md bg-amber-100 px-2 py-1 text-xs font-medium text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">
-                <ListPlusIcon className="h-3 w-3" />
-                <span>{messageQueue.length} {t('input.queued', { defaultValue: 'queued' })}</span>
-              </div>
-            )}
             <div
               className={`hidden text-xs text-muted-foreground/50 transition-opacity duration-200 lg:block ${
                 input.trim() ? 'opacity-0' : 'opacity-100'
@@ -430,9 +423,21 @@ export default function ChatComposer({
               {sendByCtrlEnter ? t('input.hintText.ctrlEnter') : t('input.hintText.enter')}
             </div>
 
-            {/* When session is active, show queue button */}
+            {/* When session is active, show send + queue buttons */}
             {hasActiveSession ? (
               <div className="flex items-center gap-1">
+                <PromptInputSubmit
+                  disabled={!input.trim()}
+                  className="h-10 w-10 sm:h-10 sm:w-10"
+                  onMouseDown={(event) => {
+                    event.preventDefault();
+                    onSubmit(event as unknown as MouseEvent<HTMLButtonElement>);
+                  }}
+                  onTouchStart={(event) => {
+                    event.preventDefault();
+                    onSubmit(event as unknown as TouchEvent<HTMLButtonElement>);
+                  }}
+                />
                 <button
                   type="button"
                   disabled={!input.trim()}
@@ -445,19 +450,6 @@ export default function ChatComposer({
                 >
                   <ListPlusIcon className="h-4 w-4" />
                   <span className="hidden sm:inline">{t('input.queue', { defaultValue: 'Queue' })}</span>
-                </button>
-                <button
-                  type="button"
-                  disabled={!input.trim()}
-                  onClick={() => {
-                    onProcessQueueNow();
-                    onSubmit({ preventDefault: () => {} } as FormEvent<HTMLFormElement>);
-                  }}
-                  className="flex h-10 items-center gap-1 rounded-lg border border-blue-300/60 bg-blue-50 px-3 text-xs font-medium text-blue-700 transition-colors hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-blue-600/40 dark:bg-blue-900/20 dark:text-blue-300 dark:hover:bg-blue-900/30"
-                  title={t('input.sendNow', { defaultValue: 'Send now (interrupt current task)' })}
-                >
-                  <SendIcon className="h-4 w-4" />
-                  <span className="hidden sm:inline">{t('input.sendNow', { defaultValue: 'Send Now' })}</span>
                 </button>
               </div>
             ) : (

@@ -15,6 +15,7 @@ import { useSessionStore } from '../../../stores/useSessionStore';
 
 import ChatMessagesPane from './subcomponents/ChatMessagesPane';
 import ChatComposer from './subcomponents/ChatComposer';
+import MessageQueuePanel from './subcomponents/MessageQueuePanel';
 
 
 type PendingViewSession = {
@@ -163,6 +164,7 @@ function ChatInterface({
     isDragActive,
     openImagePicker,
     handleSubmit,
+    submitWithContent,
     handleInputChange,
     handleKeyDown,
     handlePaste,
@@ -213,6 +215,8 @@ function ChatInterface({
     queue: messageQueue,
     queueLength: messageQueueLength,
     addToQueue,
+    removeFromQueue,
+    reorderQueue,
     processNextMessage,
     finishProcessing,
     clearQueue,
@@ -234,33 +238,27 @@ function ChatInterface({
   const handleProcessQueueNow = useCallback(() => {
     const nextMsg = processNextMessage();
     if (nextMsg) {
-      // Set the input to the queued message and it will be sent
-      setInput(nextMsg.content);
+      submitWithContent(nextMsg.content);
     }
-  }, [processNextMessage, setInput]);
+  }, [processNextMessage, submitWithContent]);
 
-  // When session completes processing, check if there are queued messages
-  // Temporarily disabled - causing issues with message sending
-  // TODO: re-enable after fixing the auto-send logic
-  /*
+  // When session completes processing, automatically send the next queued message
+  const isProcessingQueueRef = useRef(false);
   useEffect(() => {
-    if (!isLoading && messageQueueLength > 0) {
-      // Process the next queued message
+    if (!isLoading && messageQueueLength > 0 && !isProcessingQueueRef.current) {
+      isProcessingQueueRef.current = true;
       const nextMsg = processNextMessage();
       if (nextMsg) {
-        // Set the input and trigger submit
-        setInput(nextMsg.content);
-        // Manually trigger submit after state update
-        setTimeout(() => {
-          const form = document.querySelector('form');
-          if (form) {
-            form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
-          }
-        }, 100);
+        finishProcessing(); // Reset processingRef so next processNextMessage() works
+        submitWithContent(nextMsg.content);
+      } else {
+        isProcessingQueueRef.current = false;
       }
     }
-  }, [isLoading, messageQueueLength, processNextMessage, setInput]);
-  */
+    if (isLoading) {
+      isProcessingQueueRef.current = false;
+    }
+  }, [isLoading, messageQueueLength, processNextMessage, submitWithContent, finishProcessing]);
 
   // On WebSocket reconnect, re-fetch the current session's messages from the server
   // so missed streaming events are shown. Also reset isLoading.
@@ -359,7 +357,13 @@ function ChatInterface({
 
   return (
     <PermissionContext.Provider value={permissionContextValue}>
-      <div className="flex h-full flex-col">
+      <div className="flex h-full flex-col relative">
+        {/* Floating message queue panel */}
+        <MessageQueuePanel
+          queue={messageQueue}
+          onRemove={removeFromQueue}
+          onReorder={reorderQueue}
+        />
         <ChatMessagesPane
           scrollContainerRef={scrollContainerRef}
           onWheel={handleScroll}
