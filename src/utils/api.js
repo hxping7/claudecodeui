@@ -1,8 +1,21 @@
 import { IS_PLATFORM } from "../constants/config";
 
+// Debug logging - only in dev mode, controlled by VITE_API_DEBUG or auto-detected
+const API_DEBUG = import.meta.env.VITE_API_DEBUG === '1'
+    || (import.meta.env.VITE_API_DEBUG === undefined && import.meta.env.DEV);
+const debugLog = API_DEBUG ? (...args) => console.log('[API Debug]', ...args) : () => {};
+
 // Utility function for authenticated API calls
 export const authenticatedFetch = (url, options = {}) => {
   const token = localStorage.getItem('auth-token');
+
+  debugLog('authenticatedFetch called:', {
+    url,
+    token: token ? token.substring(0, 30) + '...' : null,
+    tokenLength: token?.length,
+    IS_PLATFORM,
+    shouldAddAuth: !IS_PLATFORM && !!token
+  });
 
   const defaultHeaders = {};
 
@@ -14,6 +27,8 @@ export const authenticatedFetch = (url, options = {}) => {
   if (!IS_PLATFORM && token) {
     defaultHeaders['Authorization'] = `Bearer ${token}`;
   }
+
+  debugLog('Headers:', defaultHeaders);
 
   return fetch(url, {
     ...options,

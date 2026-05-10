@@ -14,6 +14,7 @@
 
 import { query } from '@anthropic-ai/claude-agent-sdk';
 import crypto from 'crypto';
+import fsSync from 'fs';
 import { promises as fs } from 'fs';
 import path from 'path';
 import os from 'os';
@@ -35,6 +36,62 @@ const pendingToolApprovals = new Map();
 const TOOL_APPROVAL_TIMEOUT_MS = parseInt(process.env.CLAUDE_TOOL_APPROVAL_TIMEOUT_MS, 10) || 55000;
 
 const TOOLS_REQUIRING_INTERACTION = new Set(['AskUserQuestion', 'ExitPlanMode']);
+
+// Cache for model mapping from settings.json
+let modelMappingCache = null;
+
+/**
+ * Read model mapping from settings.json
+ */
+function getModelMapping() {
+  if (modelMappingCache) {
+    return modelMappingCache;
+  }
+
+  try {
+    const settingsPath = path.join(os.homedir(), '.claude', 'settings.json');
+    if (fsSync.existsSync(settingsPath)) {
+      const content = fsSync.readFileSync(settingsPath, 'utf8');
+      const settings = JSON.parse(content);
+      const env = settings.env || {};
+
+      modelMappingCache = {
+        default: env.ANTHROPIC_MODEL || env.ANTHROPIC_DEFAULT_OPUS_MODEL || 'opus',
+        opus: env.ANTHROPIC_DEFAULT_OPUS_MODEL || 'opus',
+        sonnet: env.ANTHROPIC_DEFAULT_SONNET_MODEL || 'sonnet',
+        haiku: env.ANTHROPIC_DEFAULT_HAIKU_MODEL || 'haiku',
+      };
+      return modelMappingCache;
+    }
+  } catch (e) {
+    console.error('Error reading model mapping:', e);
+  }
+
+  return {
+    default: 'opus',
+    opus: 'opus',
+    sonnet: 'sonnet',
+    haiku: 'haiku',
+  };
+}
+
+/**
+ * Map internal model value to actual model name from settings.json
+ */
+function mapModelValue(modelValue) {
+  if (!modelValue) {
+    return CLAUDE_MODELS.DEFAULT;
+  }
+
+  // If already a real model name (not internal value), return as-is
+  const internalValues = ['default', 'opus', 'sonnet', 'haiku', 'opusplan', 'sonnet[1m]', 'opus[1m]'];
+  if (!internalValues.includes(modelValue)) {
+    return modelValue;
+  }
+
+  const mapping = getModelMapping();
+  return mapping[modelValue] || CLAUDE_MODELS.DEFAULT;
+}
 
 function createRequestId() {
   if (typeof crypto.randomUUID === 'function') {
@@ -204,7 +261,8 @@ function mapCliOptionsToSDK(options = {}) {
 
   // Map model (default to sonnet)
   // Valid models: sonnet, opus, haiku, opusplan, sonnet[1m]
-  sdkOptions.model = options.model || CLAUDE_MODELS.DEFAULT;
+  // Map internal model value to actual model name from settings.json
+  sdkOptions.model = mapModelValue(options.model) || CLAUDE_MODELS.DEFAULT;
   // Model logged at query start below
 
   // Map system prompt configuration

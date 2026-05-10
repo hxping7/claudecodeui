@@ -63,11 +63,19 @@ export const sessionsService = {
     options: Pick<FetchHistoryOptions, 'limit' | 'offset'> = {},
   ): Promise<FetchHistoryResult> {
     const session = sessionsDb.getSessionById(sessionId);
+
     if (!session) {
-      throw new AppError(`Session "${sessionId}" was not found.`, {
-        code: 'SESSION_NOT_FOUND',
-        statusCode: 404,
-      });
+      // Session may still be streaming — the file-system watcher hasn't
+      // indexed it yet.  Return an empty result instead of 404 so the
+      // frontend can fall back to realtime WebSocket messages.
+      return Promise.resolve({
+        messages: [],
+        total: 0,
+        hasMore: false,
+        offset: 0,
+        limit: options.limit ?? null,
+        tokenUsage: null,
+      } satisfies FetchHistoryResult);
     }
 
     // Look up project_path from projects table using project_id

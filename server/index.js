@@ -89,6 +89,20 @@ console.log('SERVER_PORT from env:', process.env.SERVER_PORT);
 const app = express();
 const server = http.createServer(app);
 
+// 请求日志中间件 - dev 模式默认开启，生产模式默认关闭，可通过 API_DEBUG_LOG 环境变量覆盖
+const API_DEBUG_LOG = process.env.API_DEBUG_LOG === '1'
+    || (process.env.API_DEBUG_LOG === undefined && !fs.existsSync(path.join(APP_ROOT, 'dist', 'index.html')));
+const DEBUG_LOG_FILE = '/tmp/claude-api-debug.log';
+const debugLog = API_DEBUG_LOG ? (...args) => console.log('[DEBUG]', ...args) : () => {};
+if (API_DEBUG_LOG) {
+    app.use((req, res, next) => {
+        const logMsg = `[${new Date().toISOString()}] ${req.method} ${req.url} | auth: ${req.headers.authorization?.substring(0, 30) || 'NONE'} | query: ${JSON.stringify(req.query).substring(0, 100)}`;
+        console.log(logMsg);
+        fs.appendFileSync(DEBUG_LOG_FILE, logMsg + '\n');
+        next();
+    });
+}
+
 // Single WebSocket server that handles chat, shell, and plugin proxy paths.
 const wss = createWebSocketServer(server, {
     verifyClient: {
@@ -995,11 +1009,11 @@ const uploadFilesHandler = async (req, res) => {
                 try {
                     filePaths = JSON.parse(relativePaths);
                 } catch (e) {
-                    console.log('[DEBUG] Failed to parse relativePaths:', relativePaths);
+                    debugLog('Failed to parse relativePaths:', relativePaths);
                 }
             }
 
-            console.log('[DEBUG] File upload request:', {
+            debugLog('File upload request:', {
                 projectId,
                 targetPath: JSON.stringify(targetPath),
                 targetPathType: typeof targetPath,
@@ -1018,27 +1032,27 @@ const uploadFilesHandler = async (req, res) => {
                 return res.status(404).json({ error: 'Project not found or access denied' });
             }
 
-            console.log('[DEBUG] Project root:', projectRoot);
+            debugLog('Project root:', projectRoot);
 
             // Validate and resolve target path
             // If targetPath is empty or '.', use project root directly
             const targetDir = targetPath || '';
             let resolvedTargetDir;
 
-            console.log('[DEBUG] Target dir:', JSON.stringify(targetDir));
+            debugLog('Target dir:', JSON.stringify(targetDir));
 
             if (!targetDir || targetDir === '.' || targetDir === './') {
                 // Empty path means upload to project root
                 resolvedTargetDir = path.resolve(projectRoot);
-                console.log('[DEBUG] Using project root as target:', resolvedTargetDir);
+                debugLog('Using project root as target:', resolvedTargetDir);
             } else {
                 const validation = validatePathInProject(projectRoot, targetDir);
                 if (!validation.valid) {
-                    console.log('[DEBUG] Path validation failed:', validation.error);
+                    debugLog('Path validation failed:', validation.error);
                     return res.status(403).json({ error: validation.error });
                 }
                 resolvedTargetDir = validation.resolved;
-                console.log('[DEBUG] Resolved target dir:', resolvedTargetDir);
+                debugLog('Resolved target dir:', resolvedTargetDir);
             }
 
             // Ensure target directory exists
@@ -1050,18 +1064,18 @@ const uploadFilesHandler = async (req, res) => {
 
             // Move uploaded files from temp to target directory
             const uploadedFiles = [];
-            console.log('[DEBUG] Processing files:', req.files.map(f => ({ originalname: f.originalname, path: f.path })));
+            debugLog('Processing files:', req.files.map(f => ({ originalname: f.originalname, path: f.path })));
             for (let i = 0; i < req.files.length; i++) {
                 const file = req.files[i];
                 // Use relative path if provided (for folder uploads), otherwise use originalname
                 const fileName = (filePaths && filePaths[i]) ? filePaths[i] : file.originalname;
-                console.log('[DEBUG] Processing file:', fileName, '(originalname:', file.originalname + ')');
+                debugLog('Processing file:', fileName, '(originalname:', file.originalname + ')');
                 const destPath = path.join(resolvedTargetDir, fileName);
 
                 // Validate destination path
                 const destValidation = validatePathInProject(projectRoot, destPath);
                 if (!destValidation.valid) {
-                    console.log('[DEBUG] Destination validation failed for:', destPath);
+                    debugLog('Destination validation failed for:', destPath);
                     // Clean up temp file
                     await fsPromises.unlink(file.path).catch(() => {});
                     continue;
@@ -1337,7 +1351,15 @@ app.get('/api/projects/:projectId/sessions/:sessionId/token-usage', authenticate
             fileContent = await fsPromises.readFile(jsonlPath, 'utf8');
         } catch (error) {
             if (error.code === 'ENOENT') {
-                return res.status(404).json({ error: 'Session file not found', path: jsonlPath });
+                // Session file may not exist yet if the session is still streaming.
+                // Return zeros instead of 404 to avoid frontend errors.
+                const parsedContextWindow = parseInt(process.env.CONTEXT_WINDOW, 10);
+                const contextWindow = Number.isFinite(parsedContextWindow) ? parsedContextWindow : 160000;
+                return res.json({
+                    used: 0,
+                    total: contextWindow,
+                    breakdown: { input: 0, cacheCreation: 0, cacheRead: 0 }
+                });
             }
             throw error; // Re-throw other errors to be caught by outer try-catch
         }

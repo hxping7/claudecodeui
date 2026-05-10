@@ -240,6 +240,9 @@ function ChatInterface({
   }, [processNextMessage, setInput]);
 
   // When session completes processing, check if there are queued messages
+  // Temporarily disabled - causing issues with message sending
+  // TODO: re-enable after fixing the auto-send logic
+  /*
   useEffect(() => {
     if (!isLoading && messageQueueLength > 0) {
       // Process the next queued message
@@ -257,6 +260,7 @@ function ChatInterface({
       }
     }
   }, [isLoading, messageQueueLength, processNextMessage, setInput]);
+  */
 
   // On WebSocket reconnect, re-fetch the current session's messages from the server
   // so missed streaming events are shown. Also reset isLoading.
