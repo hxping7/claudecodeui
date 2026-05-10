@@ -107,8 +107,12 @@
     "databaseModeDesc": "Users are stored in the application's database with encrypted passwords.",
     "linuxMode": "Linux PAM Authentication",
     "linuxModeDesc": "Users authenticate using their Linux system credentials (PAM).",
+    "adminUsers": "Admin Users (PAM Mode)",
+    "adminUsersDesc": "Comma-separated list of Linux usernames that will have admin privileges.",
+    "adminUsersPlaceholder": "e.g., admin, root, user1",
     "saveSuccess": "Settings saved successfully.",
     "saving": "Saving...",
+    "save": "Save",
     "infoTitle": "About Authentication Modes",
     "infoDatabase": "Database mode: Users must be manually registered by an admin.",
     "infoLinux": "Linux PAM mode: Users log in with their existing Linux username and password. Each user gets their home directory as workspace."

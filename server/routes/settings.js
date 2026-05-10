@@ -373,6 +373,35 @@ router.put('/auth-mode', requireAdmin, async (req, res) => {
   }
 });
 
+// Get Linux PAM admin users list
+router.get('/linux-admin-users', authenticateToken, async (req, res) => {
+  try {
+    const adminUsers = appConfigDb.get('linux_admin_users') || '';
+    res.json({ success: true, adminUsers: adminUsers.split(',').map(s => s.trim()).filter(Boolean) });
+  } catch (error) {
+    console.error('Error fetching admin users:', error);
+    res.status(500).json({ error: 'Failed to fetch admin users' });
+  }
+});
+
+// Update Linux PAM admin users list
+router.put('/linux-admin-users', requireAdmin, async (req, res) => {
+  try {
+    const { adminUsers } = req.body;
+
+    if (!Array.isArray(adminUsers)) {
+      return res.status(400).json({ error: 'adminUsers must be an array' });
+    }
+
+    const adminUsersStr = adminUsers.map(s => s.trim()).filter(Boolean).join(',');
+    appConfigDb.set('linux_admin_users', adminUsersStr);
+    res.json({ success: true, adminUsers: adminUsers });
+  } catch (error) {
+    console.error('Error saving admin users:', error);
+    res.status(500).json({ error: 'Failed to save admin users' });
+  }
+});
+
 // Update visible providers configuration
 router.put('/visible-providers', async (req, res) => {
   try {

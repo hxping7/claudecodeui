@@ -106,8 +106,13 @@ router.post('/login', async (req, res) => {
       // Get or create user in database (auto-provisioning)
       let user = userDb.getUserByUsername(username);
       if (!user) {
-        // Auto-create user with 'user' role and placeholder password (not used for Linux auth)
-        user = userDb.createUser(username, 'PAM_AUTH_PLACEHOLDER', 'user');
+        // Determine role: check if user is in admin list
+        const adminUsers = (appConfigDb.get('linux_admin_users') || '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+        const isAdmin = adminUsers.includes(username.toLowerCase());
+        const role = isAdmin ? 'admin' : 'user';
+
+        // Auto-create user with appropriate role
+        user = userDb.createUser(username, 'PAM_AUTH_PLACEHOLDER', role);
       }
 
       // Generate token with Linux user info
