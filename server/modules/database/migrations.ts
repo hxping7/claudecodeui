@@ -556,6 +556,41 @@ const migrateToMultipleProjectsPerDirectory = (db: Database): void => {
   }
 };
 
+/**
+ * Fixes null user_id in projects and sessions tables.
+ * Assigns orphaned records to the first superadmin (or first user if no superadmin).
+ * This handles data created before multi-user support was implemented.
+ */
+const fixNullUserIdInProjectsAndSessions = (db: Database): void => {
+  // Check if there are any null user_id in projects
+  const projectsWithNullUser = db.prepare('SELECT COUNT(*) as count FROM projects WHERE user_id IS NULL').get() as { count: number };
+  const sessionsWithNullUser = db.prepare('SELECT COUNT(*) as count FROM sessions WHERE user_id IS NULL').get() as { count: number };
+
+  if (projectsWithNullUser.count === 0 && sessionsWithNullUser.count === 0) {
+    return; // No orphaned data
+  }
+
+  // Find the superadmin (or first user as fallback)
+  const superadmin = db.prepare("SELECT id FROM users WHERE role = 'superadmin' LIMIT 1").get() as { id: number } | undefined;
+  const firstUser = db.prepare('SELECT id FROM users ORDER BY id ASC LIMIT 1').get() as { id: number } | undefined;
+  const targetUserId = superadmin?.id ?? firstUser?.id;
+
+  if (!targetUserId) {
+    console.log('No users found, cannot fix orphaned projects/sessions');
+    return;
+  }
+
+  if (projectsWithNullUser.count > 0) {
+    const result = db.prepare('UPDATE projects SET user_id = ? WHERE user_id IS NULL').run(targetUserId);
+    console.log(`Migration: Assigned ${result.changes} orphaned projects to user ${targetUserId}`);
+  }
+
+  if (sessionsWithNullUser.count > 0) {
+    const result = db.prepare('UPDATE sessions SET user_id = ? WHERE user_id IS NULL').run(targetUserId);
+    console.log(`Migration: Assigned ${result.changes} orphaned sessions to user ${targetUserId}`);
+  }
+};
+
 export const runMigrations = (db: Database) => {
   try {
     const usersTableInfo = db.prepare('PRAGMA table_info(users)').all() as { name: string }[];
@@ -663,6 +698,9 @@ export const runMigrations = (db: Database) => {
 
     // Migration: Update role CHECK constraint to include superadmin
     updateRoleCheckConstraint(db);
+
+    // Migration: Fix null user_id in projects and sessions (assign to superadmin)
+    fixNullUserIdInProjectsAndSessions(db);
 
     console.log('Database migrations completed successfully');
   } catch (error: any) {
