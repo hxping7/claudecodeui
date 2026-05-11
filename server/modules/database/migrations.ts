@@ -627,6 +627,11 @@ export const runMigrations = (db: Database) => {
     );
     db.exec('CREATE INDEX IF NOT EXISTS idx_projects_user_id ON projects(user_id)');
 
+    // Add home_dir column to users table for PAM mode
+    const usersTableInfoForHomeDir = db.prepare('PRAGMA table_info(users)').all() as { name: string }[];
+    const usersColumnNamesForHomeDir = usersTableInfoForHomeDir.map((column) => column.name);
+    addColumnToTableIfNotExists(db, 'users', usersColumnNamesForHomeDir, 'home_dir', 'TEXT');
+
     // Agent config table
     db.exec(AGENT_CONFIG_TABLE_SCHEMA_SQL);
 

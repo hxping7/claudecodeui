@@ -9,7 +9,8 @@ CREATE TABLE IF NOT EXISTS users (
     git_name TEXT,
     git_email TEXT,
     has_completed_onboarding BOOLEAN DEFAULT 0,
-    role TEXT DEFAULT 'user' CHECK(role IN ('admin', 'user'))
+    role TEXT DEFAULT 'user' CHECK(role IN ('admin', 'user')),
+    home_dir TEXT
 );
 `;
 

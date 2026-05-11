@@ -1,5 +1,23 @@
 {
   "title": "管理面板",
+  "auth": {
+    "title": "认证设置",
+    "description": "配置用户的认证方式",
+    "mode": "认证模式",
+    "databaseMode": "数据库认证",
+    "databaseModeDesc": "用户存储在应用数据库中,密码加密存储",
+    "linuxMode": "Linux PAM 认证",
+    "linuxModeDesc": "用户使用 Linux 系统凭证 (PAM) 进行认证",
+    "adminUsers": "管理员用户 (PAM模式)",
+    "adminUsersDesc": "逗号分隔的 Linux 用户名列表,将拥有管理员权限",
+    "adminUsersPlaceholder": "例如: admin, root, user1",
+    "saveSuccess": "设置保存成功",
+    "saving": "保存中...",
+    "save": "保存",
+    "infoTitle": "关于认证模式",
+    "infoDatabase": "数据库模式: 用户需由管理员手动注册",
+    "infoLinux": "Linux PAM 模式: 用户使用现有 Linux 用户名和密码登录。每个用户的工作区为其 home 目录"
+  },
   "users": {
     "title": "用户管理",
     "createUser": "创建用户",

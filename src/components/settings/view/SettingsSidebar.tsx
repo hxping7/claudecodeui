@@ -1,4 +1,4 @@
-import { Bell, Bot, GitBranch, Info, Key, ListChecks, Palette, Puzzle, Shield } from 'lucide-react';
+import { Bell, Bot, GitBranch, Info, Key, ListChecks, Palette, Puzzle } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { cn } from '../../../lib/utils';
 import { PillBar, Pill } from '../../../shared/view/ui';
@@ -19,7 +19,6 @@ type NavItem = {
 
 const NAV_ITEMS: NavItem[] = [
   { id: 'agents', labelKey: 'mainTabs.agents', icon: Bot, configKey: 'showSettingsAgents' },
-  { id: 'auth', labelKey: 'mainTabs.auth', icon: Shield, configKey: 'showSettingsAuth' },
   { id: 'appearance', labelKey: 'mainTabs.appearance', icon: Palette, configKey: 'showSettingsAppearance' },
   { id: 'git', labelKey: 'mainTabs.git', icon: GitBranch, configKey: 'showSettingsGit' },
   { id: 'api', labelKey: 'mainTabs.apiTokens', icon: Key, configKey: 'showSettingsApi' },

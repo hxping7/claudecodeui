@@ -1,4 +1,5 @@
 import express from 'express';
+import os from 'os';
 import bcrypt from 'bcrypt';
 import { userDb, appConfigDb } from '../modules/database/index.js';
 import { getConnection } from '../modules/database/connection.js';
@@ -115,6 +116,10 @@ router.post('/login', async (req, res) => {
         user = userDb.createUser(username, 'PAM_AUTH_PLACEHOLDER', role);
       }
 
+      // Update user's homeDir in database for PAM users
+      userDb.updateUser(user.id, { home_dir: authResult.homeDir });
+      user = { ...user, home_dir: authResult.homeDir };
+
       // Check if user is disabled (works for both Database and PAM mode)
       if (user.is_active === 0 || user.is_active === false) {
         return res.status(401).json({ error: 'Account is disabled. Contact admin.' });
@@ -123,7 +128,7 @@ router.post('/login', async (req, res) => {
       // Generate token with Linux user info
       const token = generateToken({
         ...user,
-        homeDir: authResult.homeDir,
+        home_dir: authResult.homeDir,
         uid: authResult.uid,
         gid: authResult.gid,
       });
@@ -152,6 +157,13 @@ router.post('/login', async (req, res) => {
     const isValidPassword = await bcrypt.compare(password, user.password_hash);
     if (!isValidPassword) {
       return res.status(401).json({ error: 'Invalid username or password' });
+    }
+
+    // Update home_dir from OS for database auth users
+    const userHomeDir = os.homedir();
+    if (user.home_dir !== userHomeDir) {
+      userDb.updateUser(user.id, { home_dir: userHomeDir });
+      user = { ...user, home_dir: userHomeDir };
     }
 
     // Generate token

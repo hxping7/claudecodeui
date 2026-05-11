@@ -1,6 +1,6 @@
 import { exec } from 'child_process';
 import { promisify } from 'util';
-import pam from 'authenticate-pam';
+import { randomBytes } from 'crypto';
 
 const execAsync = promisify(exec);
 
@@ -48,9 +48,9 @@ export async function getLinuxUserInfo(username: string): Promise<{
 }
 
 /**
- * Validate Linux user credentials using PAM
- * Uses the authenticate-pam npm package for proper PAM authentication
- * Does NOT require root - can run as any user with PAM access
+ * Validate Linux user credentials using su command
+ * This performs real PAM authentication via the su command
+ * Does NOT require root - runs as the web server user with su access
  */
 export async function authenticateWithLinux(username: string, password: string): Promise<{
   success: boolean;
@@ -66,28 +66,30 @@ export async function authenticateWithLinux(username: string, password: string):
   }
 
   try {
-    // Use PAM for authentication - this performs real PAM verification
-    // Does NOT require root privileges
-    await new Promise<void>((resolve, reject) => {
-      pam.authenticate(username, password, (err: Error | null) => {
-        if (err) {
-          reject(err);
-        } else {
-          resolve();
-        }
-      });
+    // Escape password for shell safety
+    const safePassword = password.replace(/'/g, "'\\''");
+    const verifyToken = randomBytes(8).toString('hex');
+
+    // Use su to validate password - this performs real PAM authentication
+    const cmd = `echo '${safePassword}' | su - ${username} -c "echo '${verifyToken}'" 2>/dev/null`;
+
+    const { stdout } = await execAsync(cmd, {
+      encoding: 'utf8',
+      timeout: 10000,
     });
 
-    // Authentication successful
-    return {
-      success: true,
-      homeDir: userInfo.homeDir,
-      uid: userInfo.uid,
-      gid: userInfo.gid,
-    };
-  } catch (err) {
-    const errorMessage = err instanceof Error ? err.message : 'Authentication failed';
-    return { success: false, error: errorMessage };
+    if (stdout.trim() === verifyToken) {
+      return {
+        success: true,
+        homeDir: userInfo.homeDir,
+        uid: userInfo.uid,
+        gid: userInfo.gid,
+      };
+    }
+
+    return { success: false, error: 'Invalid password' };
+  } catch {
+    return { success: false, error: 'Authentication failed' };
   }
 }
 

@@ -3,11 +3,12 @@ import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../auth/context/AuthContext';
 import { Button } from '../../../shared/view/ui';
-import { Users, PanelLeftClose, PanelLeft, LogOut, ArrowLeft, Settings } from 'lucide-react';
+import { Users, PanelLeftClose, PanelLeft, LogOut, ArrowLeft, Settings, Shield } from 'lucide-react';
 import UserManagement from './UserManagement';
 import UISettingsPanel from './UISettingsPanel';
+import AuthSettingsPanel from './AuthSettingsPanel';
 
-type TabType = 'users' | 'ui-settings';
+type TabType = 'users' | 'ui-settings' | 'auth-settings';
 
 export default function AdminPanel() {
   const { t } = useTranslation('admin');
@@ -18,6 +19,7 @@ export default function AdminPanel() {
 
   const tabs: { id: TabType; icon: React.ReactNode; label: string }[] = [
     { id: 'users', icon: <Users className="h-4 w-4" />, label: t('users.title') },
+    { id: 'auth-settings', icon: <Shield className="h-4 w-4" />, label: t('auth.title') },
     { id: 'ui-settings', icon: <Settings className="h-4 w-4" />, label: t('uiSettings.title') },
   ];
 
@@ -94,6 +96,7 @@ export default function AdminPanel() {
       {/* Main Content */}
       <main className="flex-1 overflow-auto p-6">
         {activeTab === 'users' && <UserManagement />}
+        {activeTab === 'auth-settings' && <AuthSettingsPanel />}
         {activeTab === 'ui-settings' && <UISettingsPanel />}
       </main>
     </div>

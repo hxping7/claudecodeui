@@ -11,6 +11,17 @@ import { authenticateToken } from '../middleware/auth.js';
 
 const router = express.Router();
 
+// Helper to get current user's home directory with path validation
+const getCurrentUserHomeDir = (req) => {
+  const userHome = req.user?.home_dir || os.homedir();
+  // Validate it's within /home or /root
+  if (!userHome.startsWith('/home/') && !userHome.startsWith('/root')) {
+    console.error('Invalid home directory path:', userHome);
+    return os.homedir();
+  }
+  return userHome;
+};
+
 // Configure multer for logo uploads
 const logosDir = path.join(os.homedir(), '.cloudcli', 'logos');
 const storage = multer.diskStorage({
@@ -39,12 +50,18 @@ const upload = multer({
   }
 });
 
-// Provider settings file paths
-const PROVIDER_SETTINGS_PATHS = {
-  claude: () => path.join(os.homedir(), '.claude', 'settings.json'),
-  cursor: () => path.join(os.homedir(), '.cursor', 'settings.json'),
-  codex: () => path.join(os.homedir(), '.codex', 'settings.json'),
-  gemini: () => path.join(os.homedir(), '.gemini', 'settings.json'),
+// Provider settings file paths - use authenticated user's home directory
+const getProviderSettingsPaths = (userHomeDir) => ({
+  claude: () => path.join(userHomeDir, '.claude', 'settings.json'),
+  cursor: () => path.join(userHomeDir, '.cursor', 'settings.json'),
+  codex: () => path.join(userHomeDir, '.codex', 'settings.json'),
+  gemini: () => path.join(userHomeDir, '.gemini', 'settings.json'),
+});
+
+// Helper wrapper to get settings paths for current user
+const getSettingsPath = (req, provider) => {
+  const userHome = getCurrentUserHomeDir(req);
+  return getProviderSettingsPaths(userHome)[provider]();
 };
 
 // Default visible providers (all providers enabled by default)
@@ -574,7 +591,7 @@ router.get('/provider-settings/:provider', async (req, res) => {
       return res.status(400).json({ error: `Invalid provider. Must be one of: ${validProviders.join(', ')}` });
     }
 
-    const settingsPath = PROVIDER_SETTINGS_PATHS[provider]();
+    const settingsPath = getSettingsPath(req, provider)();
 
     // Check if file exists
     if (!fs.existsSync(settingsPath)) {
@@ -622,7 +639,7 @@ router.put('/provider-settings/:provider', async (req, res) => {
       return res.status(400).json({ error: 'Invalid JSON content' });
     }
 
-    const settingsPath = PROVIDER_SETTINGS_PATHS[provider]();
+    const settingsPath = getSettingsPath(req, provider)();
     const settingsDir = path.dirname(settingsPath);
 
     // Ensure directory exists
@@ -661,7 +678,7 @@ router.get('/models', async (req, res) => {
     };
 
     // Read Claude settings
-    const claudeSettingsPath = PROVIDER_SETTINGS_PATHS.claude();
+    const claudeSettingsPath = getProviderSettingsPaths(getCurrentUserHomeDir(req)).claude();
     if (fs.existsSync(claudeSettingsPath)) {
       try {
         const content = fs.readFileSync(claudeSettingsPath, 'utf8');
@@ -696,7 +713,7 @@ router.get('/models', async (req, res) => {
     }
 
     // Read Codex/OpenAI settings
-    const codexSettingsPath = PROVIDER_SETTINGS_PATHS.codex();
+    const codexSettingsPath = getProviderSettingsPaths(getCurrentUserHomeDir(req)).codex();
     if (fs.existsSync(codexSettingsPath)) {
       try {
         const content = fs.readFileSync(codexSettingsPath, 'utf8');
@@ -719,7 +736,7 @@ router.get('/models', async (req, res) => {
     }
 
     // Read Gemini settings
-    const geminiSettingsPath = PROVIDER_SETTINGS_PATHS.gemini();
+    const geminiSettingsPath = getProviderSettingsPaths(getCurrentUserHomeDir(req)).gemini();
     if (fs.existsSync(geminiSettingsPath)) {
       try {
         const content = fs.readFileSync(geminiSettingsPath, 'utf8');
@@ -741,7 +758,7 @@ router.get('/models', async (req, res) => {
     }
 
     // Read Cursor settings
-    const cursorSettingsPath = PROVIDER_SETTINGS_PATHS.cursor();
+    const cursorSettingsPath = getProviderSettingsPaths(getCurrentUserHomeDir(req)).cursor();
     if (fs.existsSync(cursorSettingsPath)) {
       try {
         const content = fs.readFileSync(cursorSettingsPath, 'utf8');

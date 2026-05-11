@@ -1,6 +1,7 @@
 import jwt from 'jsonwebtoken';
 import { userDb, appConfigDb } from '../modules/database/index.js';
 import { IS_PLATFORM } from '../constants/config.js';
+import { setCurrentUserHomeDir, clearCurrentUserHomeDir } from '../claude-sdk.js';
 
 // Use env var if set, otherwise auto-generate a unique secret per installation
 const JWT_SECRET = process.env.JWT_SECRET || appConfigDb.getOrCreateJwtSecret();
@@ -70,6 +71,13 @@ const authenticateToken = async (req, res, next) => {
 
     // Add role to user object
     req.user = { ...user, role: user.role || 'user' };
+
+    // Set user home directory for PAM mode
+    const homeDir = decoded.home_dir || user.home_dir;
+    if (homeDir) {
+      setCurrentUserHomeDir(homeDir);
+    }
+
     next();
   } catch (error) {
     console.error('Token verification error:', error);
@@ -79,15 +87,18 @@ const authenticateToken = async (req, res, next) => {
 
 // Generate JWT token
 const generateToken = (user) => {
-  return jwt.sign(
-    {
-      userId: user.id,
-      username: user.username,
-      role: user.role || 'user'
-    },
-    JWT_SECRET,
-    { expiresIn: '7d' }
-  );
+  const payload = {
+    userId: user.id,
+    username: user.username,
+    role: user.role || 'user'
+  };
+
+  // Include home_dir for PAM users
+  if (user.home_dir) {
+    payload.home_dir = user.home_dir;
+  }
+
+  return jwt.sign(payload, JWT_SECRET, { expiresIn: '7d' });
 };
 
 // WebSocket authentication function
@@ -118,7 +129,13 @@ const authenticateWebSocket = (token) => {
     if (!user) {
       return null;
     }
-    return { userId: user.id, username: user.username, role: user.role || 'user' };
+
+    // Set user home directory for PAM mode
+    if (decoded.home_dir) {
+      setCurrentUserHomeDir(decoded.home_dir);
+    }
+
+    return { userId: user.id, username: user.username, role: user.role || 'user', home_dir: decoded.home_dir };
   } catch (error) {
     console.error('WebSocket token verification error:', error);
     return null;

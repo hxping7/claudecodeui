@@ -239,6 +239,60 @@ app.get('/api/public/models', (req, res) => {
     res.json({ success: true, models });
 });
 
+// Authenticated endpoint for model mapping - reads from current user's settings.json
+// This uses the authenticated user's home directory
+app.get('/api/models', authenticateToken, (req, res) => {
+  const models = {
+    claude: [],
+    cursor: [],
+    codex: [],
+    gemini: []
+  };
+
+  // Get user's home directory from token or database
+  const userHome = req.user?.home_dir || os.homedir();
+
+  const PROVIDER_SETTINGS_PATHS = {
+    claude: () => path.join(userHome, '.claude', 'settings.json'),
+    cursor: () => path.join(userHome, '.cursor', 'settings.json'),
+    codex: () => path.join(userHome, '.codex', 'settings.json'),
+    gemini: () => path.join(userHome, '.gemini', 'settings.json'),
+  };
+
+  // Read Claude settings
+  const claudeSettingsPath = PROVIDER_SETTINGS_PATHS.claude();
+  if (fs.existsSync(claudeSettingsPath)) {
+    try {
+      const content = fs.readFileSync(claudeSettingsPath, 'utf8');
+      const settings = JSON.parse(content);
+      const env = settings.env || {};
+
+      const opusActual = env.ANTHROPIC_DEFAULT_OPUS_MODEL;
+      const sonnetActual = env.ANTHROPIC_DEFAULT_SONNET_MODEL;
+      const haikuActual = env.ANTHROPIC_DEFAULT_HAIKU_MODEL;
+
+      models.claude = [
+        { value: 'default', label: opusActual ? `Default (${opusActual})` : 'Default', envKey: 'ANTHROPIC_MODEL', actualModel: opusActual },
+        { value: 'opus', label: opusActual ? `Opus Model (${opusActual})` : 'Opus Model', envKey: 'ANTHROPIC_DEFAULT_OPUS_MODEL', actualModel: opusActual },
+        { value: 'sonnet', label: sonnetActual ? `Sonnet Model (${sonnetActual})` : 'Sonnet Model', envKey: 'ANTHROPIC_DEFAULT_SONNET_MODEL', actualModel: sonnetActual },
+        { value: 'haiku', label: haikuActual ? `Haiku Model (${haikuActual})` : 'Haiku Model', envKey: 'ANTHROPIC_DEFAULT_HAIKU_MODEL', actualModel: haikuActual },
+        { value: 'opus[1m]', label: 'Opus [1M]', envKey: null, actualModel: null },
+        { value: 'sonnet[1m]', label: 'Sonnet [1M]', envKey: null, actualModel: null },
+        { value: 'claude-opus-4-6', label: 'Opus 4.6', envKey: null, actualModel: null },
+        { value: 'opusplan', label: 'Opus Plan', envKey: null, actualModel: null },
+      ];
+
+      if (env.ANTHROPIC_MODEL) {
+        models.claude.defaultModel = env.ANTHROPIC_MODEL;
+      }
+    } catch (e) {
+      console.error('Error parsing Claude settings:', e);
+    }
+  }
+
+  res.json({ success: true, models });
+});
+
 // Authentication routes (public)
 app.use('/api/auth', authRoutes);
 

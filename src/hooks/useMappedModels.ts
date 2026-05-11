@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { authenticatedFetch } from '../utils/api';
 
 export type MappedModel = {
   value: string;
@@ -38,8 +39,8 @@ export function useMappedModels() {
   const fetchMappedModels = useCallback(async () => {
     try {
       setIsLoading(true);
-      // Use public endpoint that doesn't require authentication
-      const response = await fetch('/api/public/models');
+      // Use authenticated endpoint that uses current user's home directory
+      const response = await authenticatedFetch('/api/models');
       const data = await response.json();
       if (data.success && data.models) {
         // API returns arrays directly, wrap them with models property

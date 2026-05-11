@@ -30,6 +30,22 @@ import { sessionsService } from './modules/providers/services/sessions.service.j
 import { providerAuthService } from './modules/providers/services/provider-auth.service.js';
 import { createNormalizedMessage } from './shared/utils.js';
 
+// Global context to store current user info for the request
+// This is set by the authentication middleware
+let currentUserHomeDir = null;
+
+export function setCurrentUserHomeDir(homeDir) {
+  currentUserHomeDir = homeDir;
+}
+
+export function clearCurrentUserHomeDir() {
+  currentUserHomeDir = null;
+}
+
+export function getCurrentUserHomeDir() {
+  return currentUserHomeDir || os.homedir();
+}
+
 const activeSessions = new Map();
 const pendingToolApprovals = new Map();
 
@@ -39,40 +55,48 @@ const TOOLS_REQUIRING_INTERACTION = new Set(['AskUserQuestion', 'ExitPlanMode'])
 
 // Cache for model mapping from settings.json
 let modelMappingCache = null;
+let modelMappingCacheForHome = null;
 
 /**
  * Read model mapping from settings.json
+ * Returns null if file doesn't exist (no fallback to default or other directories)
  */
 function getModelMapping() {
+  const userHome = getCurrentUserHomeDir();
+
+  // Clear cache if user changed
+  if (modelMappingCacheForHome !== userHome) {
+    modelMappingCache = null;
+    modelMappingCacheForHome = userHome;
+  }
+
   if (modelMappingCache) {
     return modelMappingCache;
   }
 
-  try {
-    const settingsPath = path.join(os.homedir(), '.claude', 'settings.json');
-    if (fsSync.existsSync(settingsPath)) {
-      const content = fsSync.readFileSync(settingsPath, 'utf8');
-      const settings = JSON.parse(content);
-      const env = settings.env || {};
-
-      modelMappingCache = {
-        default: env.ANTHROPIC_MODEL || env.ANTHROPIC_DEFAULT_OPUS_MODEL || 'opus',
-        opus: env.ANTHROPIC_DEFAULT_OPUS_MODEL || 'opus',
-        sonnet: env.ANTHROPIC_DEFAULT_SONNET_MODEL || 'sonnet',
-        haiku: env.ANTHROPIC_DEFAULT_HAIKU_MODEL || 'haiku',
-      };
-      return modelMappingCache;
-    }
-  } catch (e) {
-    console.error('Error reading model mapping:', e);
+  // Check user's home directory for settings.json
+  const settingsPath = path.join(userHome, '.claude', 'settings.json');
+  if (!fsSync.existsSync(settingsPath)) {
+    // File doesn't exist - return null, don't fallback to other directories
+    return null;
   }
 
-  return {
-    default: 'opus',
-    opus: 'opus',
-    sonnet: 'sonnet',
-    haiku: 'haiku',
-  };
+  try {
+    const content = fsSync.readFileSync(settingsPath, 'utf8');
+    const settings = JSON.parse(content);
+    const env = settings.env || {};
+
+    modelMappingCache = {
+      default: env.ANTHROPIC_MODEL || env.ANTHROPIC_DEFAULT_OPUS_MODEL || 'opus',
+      opus: env.ANTHROPIC_DEFAULT_OPUS_MODEL || 'opus',
+      sonnet: env.ANTHROPIC_DEFAULT_SONNET_MODEL || 'sonnet',
+      haiku: env.ANTHROPIC_DEFAULT_HAIKU_MODEL || 'haiku',
+    };
+    return modelMappingCache;
+  } catch (e) {
+    console.error('Error reading model mapping:', e);
+    return null;
+  }
 }
 
 /**
@@ -90,6 +114,11 @@ function mapModelValue(modelValue) {
   }
 
   const mapping = getModelMapping();
+  // If no mapping found (file doesn't exist), use default model names
+  if (!mapping) {
+    return CLAUDE_MODELS[modelValue.toUpperCase()] || CLAUDE_MODELS.DEFAULT;
+  }
+
   return mapping[modelValue] || CLAUDE_MODELS.DEFAULT;
 }
 

@@ -19,9 +19,10 @@ type UserRow = {
   git_email: string | null;
   has_completed_onboarding: number;
   role: 'admin' | 'user';
+  home_dir: string | null;
 };
 
-type UserPublicRow = Pick<UserRow, 'id' | 'username' | 'created_at' | 'last_login' | 'role'>;
+type UserPublicRow = Pick<UserRow, 'id' | 'username' | 'created_at' | 'last_login' | 'role' | 'home_dir'>;
 
 type UserGitConfig = {
   git_name: string | null;
@@ -85,7 +86,7 @@ export const userDb = {
     const db = getConnection();
     return db
       .prepare(
-        'SELECT id, username, created_at, last_login, role FROM users WHERE id = ? AND is_active = 1'
+        'SELECT id, username, created_at, last_login, role, home_dir FROM users WHERE id = ? AND is_active = 1'
       )
       .get(userId) as UserPublicRow | undefined;
   },
@@ -160,7 +161,7 @@ export const userDb = {
   },
 
   /** Updates user information (admin only). */
-  updateUser(userId: number, updates: Partial<Pick<UserRow, 'username' | 'git_name' | 'git_email' | 'role'>>): boolean {
+  updateUser(userId: number, updates: Partial<Pick<UserRow, 'username' | 'git_name' | 'git_email' | 'role' | 'home_dir'>>): boolean {
     const db = getConnection();
     const fields: string[] = [];
     const values: any[] = [];
@@ -180,6 +181,10 @@ export const userDb = {
     if (updates.role !== undefined) {
       fields.push('role = ?');
       values.push(updates.role);
+    }
+    if (updates.home_dir !== undefined) {
+      fields.push('home_dir = ?');
+      values.push(updates.home_dir);
     }
 
     if (fields.length === 0) {
