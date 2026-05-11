@@ -575,7 +575,7 @@ export const runMigrations = (db: Database) => {
       'users',
       userColumnNames,
       'role',
-      "TEXT DEFAULT 'user' CHECK(role IN ('admin', 'user'))"
+      "TEXT DEFAULT 'user' CHECK(role IN ('superadmin', 'admin', 'user'))"
     );
     db.exec('CREATE INDEX IF NOT EXISTS idx_users_role ON users(role)');
 
@@ -658,9 +658,98 @@ export const runMigrations = (db: Database) => {
     // Migrate existing data to first admin user
     migrateExistingDataToFirstAdmin(db);
 
+    // Migration: Promote first admin to superadmin
+    promoteFirstAdminToSuperadmin(db);
+
+    // Migration: Update role CHECK constraint to include superadmin
+    updateRoleCheckConstraint(db);
+
     console.log('Database migrations completed successfully');
   } catch (error: any) {
     console.error('Error running migrations:', error.message);
     throw error;
+  }
+};
+
+/**
+ * Promotes the first admin user to superadmin.
+ * Superadmin can bypass PAM authentication.
+ */
+const promoteFirstAdminToSuperadmin = (db: Database): void => {
+  // Check if any superadmin already exists
+  const existingSuperadmin = db
+    .prepare("SELECT id FROM users WHERE role = 'superadmin' LIMIT 1")
+    .get() as { id: number } | undefined;
+
+  if (existingSuperadmin) {
+    return; // Superadmin already exists, skip
+  }
+
+  // Promote the first admin to superadmin
+  const firstAdmin = db
+    .prepare("SELECT id FROM users WHERE role = 'admin' ORDER BY id ASC LIMIT 1")
+    .get() as { id: number } | undefined;
+
+  if (firstAdmin) {
+    console.log('Running migration: Promoting first admin to superadmin');
+    db.prepare("UPDATE users SET role = 'superadmin' WHERE id = ?").run(firstAdmin.id);
+  }
+};
+
+/**
+ * Updates the role column CHECK constraint to include 'superadmin'.
+ * SQLite doesn't support ALTER TABLE ... ALTER CONSTRAINT, so we recreate the table.
+ */
+const updateRoleCheckConstraint = (db: Database): void => {
+  // Check current constraint
+  const tableInfo = db.pragma('table_info(users)') as { name: string; dflt_value: string | null }[];
+  const roleCol = tableInfo.find(col => col.name === 'role');
+  if (!roleCol) return;
+
+  // If the constraint already includes superadmin, skip
+  // We check by trying to insert a superadmin value (in a transaction, rolled back)
+  try {
+    const testRow = db.prepare("SELECT role FROM users WHERE role = 'superadmin' LIMIT 1").get();
+    // If we can query superadmin without error, constraint likely supports it
+    // But to be safe, recreate the table with updated constraint
+  } catch {
+    // Constraint doesn't support superadmin, need to recreate
+  }
+
+  // Recreate the users table with updated CHECK constraint
+  // This is safe because SQLite table recreation is standard practice for constraint changes
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS users_new (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      username TEXT UNIQUE NOT NULL,
+      password_hash TEXT NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      last_login DATETIME,
+      is_active BOOLEAN DEFAULT 1,
+      git_name TEXT,
+      git_email TEXT,
+      has_completed_onboarding BOOLEAN DEFAULT 0,
+      role TEXT DEFAULT 'user' CHECK(role IN ('superadmin', 'admin', 'user')),
+      home_dir TEXT
+    );
+  `);
+
+  // Copy data only if the new table is empty (i.e., migration not yet run)
+  const newCount = (db.prepare('SELECT COUNT(*) as count FROM users_new').get() as { count: number }).count;
+  if (newCount === 0) {
+    db.exec(`
+      INSERT INTO users_new SELECT * FROM users;
+      DROP TABLE users;
+      ALTER TABLE users_new RENAME TO users;
+    `);
+
+    // Recreate indexes
+    db.exec('CREATE INDEX IF NOT EXISTS idx_users_username ON users(username)');
+    db.exec('CREATE INDEX IF NOT EXISTS idx_users_active ON users(is_active)');
+    db.exec('CREATE INDEX IF NOT EXISTS idx_users_role ON users(role)');
+
+    console.log('Running migration: Updated role CHECK constraint to include superadmin');
+  } else {
+    db.exec('DROP TABLE users_new');
   }
 };

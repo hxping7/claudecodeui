@@ -18,7 +18,7 @@ type UserRow = {
   git_name: string | null;
   git_email: string | null;
   has_completed_onboarding: number;
-  role: 'admin' | 'user';
+  role: 'superadmin' | 'admin' | 'user';
   home_dir: string | null;
 };
 
@@ -55,6 +55,17 @@ export const userDb = {
       .prepare('INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)')
       .run(username, passwordHash, role);
     return { id: result.lastInsertRowid, username };
+  },
+
+  /**
+   * Looks up a user by username regardless of active status.
+   * Used for PAM auth to check if user exists and is disabled.
+   */
+  getUserByUsernameAny(username: string): UserRow | undefined {
+    const db = getConnection();
+    return db
+      .prepare('SELECT * FROM users WHERE username = ?')
+      .get(username) as UserRow | undefined;
   },
 
   /**
@@ -214,14 +225,14 @@ export const userDb = {
   isAdmin(userId: number): boolean {
     const db = getConnection();
     const row = db.prepare("SELECT role FROM users WHERE id = ?").get(userId) as { role: string } | undefined;
-    return row?.role === 'admin';
+    return row?.role === 'admin' || row?.role === 'superadmin';
   },
 
   /** Gets user role. */
-  getUserRole(userId: number): 'admin' | 'user' | null {
+  getUserRole(userId: number): 'superadmin' | 'admin' | 'user' | null {
     const db = getConnection();
     const row = db.prepare("SELECT role FROM users WHERE id = ?").get(userId) as { role: string } | undefined;
-    return row?.role as 'admin' | 'user' | null;
+    return row?.role as 'superadmin' | 'admin' | 'user' | null;
   },
 
   /** Counts total users. */

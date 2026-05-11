@@ -79,7 +79,7 @@ export default function AdminPanel() {
             <div className="px-3 py-2 text-xs text-muted-foreground">
               {t('sidebar.loggedInAs')} <strong>{user?.username}</strong>
               <br />
-              <span className="text-primary">{user?.role === 'admin' ? t('users.admin') : t('users.user')}</span>
+              <span className="text-primary">{user?.role === 'superadmin' ? t('users.superadmin', { defaultValue: 'Super Admin' }) : user?.role === 'admin' ? t('users.admin') : t('users.user')}</span>
             </div>
           )}
           <Button

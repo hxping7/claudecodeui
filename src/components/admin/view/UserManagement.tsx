@@ -6,6 +6,19 @@ import { authenticatedFetch } from '../../../utils/api';
 import { Button } from '../../../shared/view/ui';
 import { Users, UserPlus, Shield, ShieldOff, Trash2, Key, Info } from 'lucide-react';
 
+const isAdminRole = (role?: string) => role === 'admin' || role === 'superadmin';
+
+// Check if current user can modify a target user
+const canModify = (currentRole: string | undefined, targetUser: { id: number; role?: string }, currentUserId: number) => {
+  // Superadmin can modify anyone (including themselves)
+  if (currentRole === 'superadmin') return true;
+  // Admin cannot modify superadmin
+  if (targetUser.role === 'superadmin') return false;
+  // Admin cannot modify other admins (except themselves)
+  if (targetUser.role === 'admin' && targetUser.id !== currentUserId) return false;
+  return true;
+};
+
 export default function UserManagement() {
   const { t } = useTranslation('admin');
   const { user: currentUser } = useAuth();
@@ -44,7 +57,7 @@ export default function UserManagement() {
   const isPamMode = authMode === 'linux';
 
   // Count admins to prevent deleting/disabling the last admin
-  const adminCount = useMemo(() => users.filter(u => u.role === 'admin').length, [users]);
+  const adminCount = useMemo(() => users.filter(u => isAdminRole(u.role)).length, [users]);
 
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showResetModal, setShowResetModal] = useState<number | null>(null);
@@ -158,15 +171,17 @@ export default function UserManagement() {
                 <td className="px-4 py-3">
                   <span
                     className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
-                      user.role === 'admin'
-                        ? 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200'
+                      isAdminRole(user.role)
+                        ? user.role === 'superadmin'
+                          ? 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200'
+                          : 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200'
                         : 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200'
                     }`}
                   >
-                    {user.role === 'admin' ? (
+                    {isAdminRole(user.role) ? (
                       <Shield className="mr-1 h-3 w-3" />
                     ) : null}
-                    {user.role === 'admin' ? t('users.admin') : t('users.user')}
+                    {user.role === 'superadmin' ? t('users.superadmin', { defaultValue: 'Super Admin' }) : isAdminRole(user.role) ? t('users.admin') : t('users.user')}
                   </span>
                 </td>
                 <td className="px-4 py-3">
@@ -190,26 +205,30 @@ export default function UserManagement() {
                 </td>
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-2">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setShowResetModal(user.id)}
-                      title={t('users.resetPassword')}
-                      disabled={isPamMode}
-                    >
-                      <Key className="h-4 w-4" />
-                    </Button>
+                    {canModify(currentUser?.role, user, currentUser?.id ?? 0) && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setShowResetModal(user.id)}
+                        title={t('users.resetPassword')}
+                        disabled={isPamMode && currentUser?.role !== 'superadmin'}
+                      >
+                        <Key className="h-4 w-4" />
+                      </Button>
+                    )}
                     <Button
                       variant="ghost"
                       size="sm"
                       onClick={() => handleToggleUser(user.id, !user.is_active)}
                       title={
-                        user.role === 'admin' && user.is_active && adminCount === 1
-                          ? t('users.cannotDisableLastAdmin', { defaultValue: 'Cannot disable the last admin' })
-                          : (user.is_active ? t('users.inactive') : t('users.active'))
+                        !canModify(currentUser?.role, user, currentUser?.id ?? 0)
+                          ? t('users.cannotModifyHigherRole', { defaultValue: 'Cannot modify this user' })
+                          : isAdminRole(user.role) && user.is_active && adminCount === 1
+                            ? t('users.cannotDisableLastAdmin', { defaultValue: 'Cannot disable the last admin' })
+                            : (user.is_active ? t('users.inactive') : t('users.active'))
                       }
-                      disabled={user.role === 'admin' && user.is_active && adminCount === 1}
-                      className={user.role === 'admin' && user.is_active && adminCount === 1 ? 'opacity-50' : ''}
+                      disabled={!canModify(currentUser?.role, user, currentUser?.id ?? 0) || (isAdminRole(user.role) && user.is_active && adminCount === 1)}
+                      className={!canModify(currentUser?.role, user, currentUser?.id ?? 0) || (isAdminRole(user.role) && user.is_active && adminCount === 1) ? 'opacity-50' : ''}
                     >
                       {user.is_active ? (
                         <ShieldOff className="h-4 w-4" />
@@ -222,12 +241,14 @@ export default function UserManagement() {
                       size="sm"
                       onClick={() => handleDeleteUser(user.id)}
                       title={
-                        user.role === 'admin' && adminCount === 1
-                          ? t('users.cannotDeleteLastAdmin', { defaultValue: 'Cannot delete the last admin' })
-                          : t('users.deleteUser')
+                        !canModify(currentUser?.role, user, currentUser?.id ?? 0)
+                          ? t('users.cannotModifyHigherRole', { defaultValue: 'Cannot modify this user' })
+                          : isAdminRole(user.role) && adminCount === 1
+                            ? t('users.cannotDeleteLastAdmin', { defaultValue: 'Cannot delete the last admin' })
+                            : t('users.deleteUser')
                       }
-                      className={`text-destructive hover:text-destructive ${user.role === 'admin' && adminCount === 1 ? 'opacity-50' : ''}`}
-                      disabled={user.role === 'admin' && adminCount === 1 || isPamMode}
+                      className={`text-destructive hover:text-destructive ${!canModify(currentUser?.role, user, currentUser?.id ?? 0) || (isAdminRole(user.role) && adminCount === 1) ? 'opacity-50' : ''}`}
+                      disabled={!canModify(currentUser?.role, user, currentUser?.id ?? 0) || isAdminRole(user.role) && adminCount === 1 || isPamMode}
                     >
                       <Trash2 className="h-4 w-4" />
                     </Button>

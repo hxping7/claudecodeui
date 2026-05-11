@@ -28,7 +28,7 @@ router.get('/status', async (req, res) => {
   }
 });
 
-// User registration - first user becomes admin, subsequent users are regular users
+// User registration - first user becomes superadmin, subsequent users are regular users
 router.post('/register', async (req, res) => {
   try {
     const { username, password } = req.body;
@@ -45,10 +45,10 @@ router.post('/register', async (req, res) => {
     // Use a transaction to prevent race conditions
     db.prepare('BEGIN').run();
     try {
-      // Check if this is the first user (becomes admin)
+      // Check if this is the first user (becomes superadmin)
       const userCount = userDb.countUsers();
       const isFirstUser = userCount === 0;
-      const role = isFirstUser ? 'admin' : 'user';
+      const role = isFirstUser ? 'superadmin' : 'user';
 
       // Hash password
       const saltRounds = 12;
@@ -98,6 +98,34 @@ router.post('/login', async (req, res) => {
     const authMode = getAuthMode();
 
     if (authMode === 'linux') {
+      // Check if user is superadmin (can bypass PAM)
+      const existingUser = userDb.getUserByUsernameAny(username);
+      if (existingUser && existingUser.role === 'superadmin') {
+        // Superadmin uses database authentication even in PAM mode
+        const isValidPassword = await bcrypt.compare(password, existingUser.password_hash);
+        if (!isValidPassword) {
+          return res.status(401).json({ error: 'Invalid username or password' });
+        }
+
+        // Update home_dir for superadmin
+        const userHomeDir = os.homedir();
+        if (existingUser.home_dir !== userHomeDir) {
+          userDb.updateUser(existingUser.id, { home_dir: userHomeDir });
+        }
+
+        const token = generateToken({ ...existingUser, home_dir: userHomeDir });
+        userDb.updateLastLogin(existingUser.id);
+
+        res.json({
+          success: true,
+          user: { id: existingUser.id, username: existingUser.username, role: existingUser.role },
+          token,
+          workspaceRoot: userHomeDir,
+          authMode: 'linux'
+        });
+        return;
+      }
+
       // Linux PAM authentication mode - verify password via PAM
       const authResult = await authenticateWithLinux(username, password);
       if (!authResult.success) {
@@ -105,7 +133,7 @@ router.post('/login', async (req, res) => {
       }
 
       // Get or create user in database (auto-provisioning)
-      let user = userDb.getUserByUsername(username);
+      let user = userDb.getUserByUsernameAny(username);
       if (!user) {
         // Determine role: check if user is in admin list
         const adminUsers = (appConfigDb.get('linux_admin_users') || '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean);

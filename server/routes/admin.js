@@ -8,6 +8,38 @@ import { requireAdmin } from '../middleware/admin.js';
 
 const router = express.Router();
 
+// Helper: check if current user can modify target user
+const canModifyUser = (currentUser, targetUserId, action = 'modify') => {
+  const targetUser = userDb.getAllUsers().find(u => u.id === targetUserId);
+  if (!targetUser) return { allowed: false, reason: 'User not found' };
+
+  // Superadmin can modify anyone, but cannot disable/delete themselves
+  if (currentUser.role === 'superadmin') {
+    // Prevent superadmin from disabling/deleting themselves
+    if (targetUser.id === currentUser.id && (action === 'delete' || action === 'disable')) {
+      return { allowed: false, reason: 'Cannot disable or delete your own account' };
+    }
+    return { allowed: true };
+  }
+
+  // Admin cannot modify superadmin
+  if (targetUser.role === 'superadmin') {
+    return { allowed: false, reason: 'Cannot modify superadmin user' };
+  }
+
+  // Admin cannot modify other admins (except themselves)
+  if (targetUser.role === 'admin' && targetUser.id !== currentUser.id) {
+    return { allowed: false, reason: 'Cannot modify other admin users' };
+  }
+
+  // Prevent admin from disabling/deleting themselves
+  if (targetUser.id === currentUser.id && (action === 'delete' || action === 'disable')) {
+    return { allowed: false, reason: 'Cannot disable or delete your own account' };
+  }
+
+  return { allowed: true };
+};
+
 // Apply admin middleware to all routes
 router.use(requireAdmin);
 
@@ -93,9 +125,15 @@ router.patch('/users/:userId', async (req, res) => {
       return res.status(400).json({ error: 'Invalid user ID' });
     }
 
+    // Check permission to delete this user
+    const perm = canModifyUser(req.user, numericUserId, 'delete');
+    if (!perm.allowed) {
+      return res.status(403).json({ error: perm.reason });
+    }
+
     // Prevent changing own admin role
-    if (req.user.id === numericUserId && role && role !== 'admin') {
-      return res.status(400).json({ error: 'Cannot demote yourself from admin' });
+    if (req.user.id === numericUserId && role && role !== req.user.role) {
+      return res.status(400).json({ error: 'Cannot change your own role' });
     }
 
     const updates = {};
@@ -116,8 +154,15 @@ router.patch('/users/:userId', async (req, res) => {
     }
 
     if (role !== undefined) {
-      if (role !== 'admin' && role !== 'user') {
-        return res.status(400).json({ error: 'Role must be admin or user' });
+      if (role !== 'superadmin' && role !== 'admin' && role !== 'user') {
+        return res.status(400).json({ error: 'Role must be superadmin, admin or user' });
+      }
+      // Only superadmin can assign superadmin or admin role
+      if (role === 'superadmin' && req.user.role !== 'superadmin') {
+        return res.status(403).json({ error: 'Only superadmin can assign superadmin role' });
+      }
+      if (role === 'admin' && req.user.role !== 'superadmin') {
+        return res.status(403).json({ error: 'Only superadmin can assign admin role' });
       }
       updates.role = role;
     }
@@ -151,6 +196,12 @@ router.delete('/users/:userId', async (req, res) => {
       return res.status(400).json({ error: 'Invalid user ID' });
     }
 
+    // Check permission to delete this user
+    const perm = canModifyUser(req.user, numericUserId, 'delete');
+    if (!perm.allowed) {
+      return res.status(403).json({ error: perm.reason });
+    }
+
     // Prevent deleting yourself
     if (req.user.id === numericUserId) {
       return res.status(400).json({ error: 'Cannot delete your own account' });
@@ -172,6 +223,7 @@ router.delete('/users/:userId', async (req, res) => {
 /**
  * POST /api/admin/users/:userId/reset-password
  * Reset user password (admin only)
+ * Note: Users can reset their own password, but cannot reset superadmin password
  */
 router.post('/users/:userId/reset-password', async (req, res) => {
   try {
@@ -181,6 +233,17 @@ router.post('/users/:userId/reset-password', async (req, res) => {
 
     if (isNaN(numericUserId)) {
       return res.status(400).json({ error: 'Invalid user ID' });
+    }
+
+    // Check if target is superadmin - only superadmin can reset superadmin password
+    const targetUser = userDb.getAllUsers().find(u => u.id === numericUserId);
+    if (targetUser?.role === 'superadmin' && req.user.role !== 'superadmin') {
+      return res.status(403).json({ error: 'Cannot reset superadmin password' });
+    }
+
+    // Prevent non-superadmin from resetting other users' passwords (they can only reset their own)
+    if (req.user.role !== 'superadmin' && numericUserId !== req.user.id) {
+      return res.status(403).json({ error: 'Cannot reset other users\' passwords' });
     }
 
     if (!password || password.length < 6) {
@@ -215,6 +278,12 @@ router.patch('/users/:userId/toggle', async (req, res) => {
 
     if (isNaN(numericUserId)) {
       return res.status(400).json({ error: 'Invalid user ID' });
+    }
+
+    // Check permission to delete this user
+    const perm = canModifyUser(req.user, numericUserId, 'delete');
+    if (!perm.allowed) {
+      return res.status(403).json({ error: perm.reason });
     }
 
     if (typeof isActive !== 'boolean') {

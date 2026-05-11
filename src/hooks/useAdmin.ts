@@ -7,7 +7,7 @@ export type AdminUser = {
   created_at: string;
   last_login: string | null;
   is_active: boolean;
-  role: 'admin' | 'user';
+  role: 'superadmin' | 'admin' | 'user';
   git_name: string | null;
   git_email: string | null;
   has_completed_onboarding: boolean;
@@ -46,7 +46,7 @@ export function useAdminUsers() {
     }
   }, []);
 
-  const createUser = useCallback(async (username: string, password: string, role: 'admin' | 'user' = 'user') => {
+  const createUser = useCallback(async (username: string, password: string, role: 'superadmin' | 'admin' | 'user' = 'user') => {
     setIsLoading(true);
     setError(null);
     try {

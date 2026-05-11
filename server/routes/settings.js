@@ -591,7 +591,7 @@ router.get('/provider-settings/:provider', async (req, res) => {
       return res.status(400).json({ error: `Invalid provider. Must be one of: ${validProviders.join(', ')}` });
     }
 
-    const settingsPath = getSettingsPath(req, provider)();
+    const settingsPath = getSettingsPath(req, provider);
 
     // Check if file exists
     if (!fs.existsSync(settingsPath)) {
@@ -639,7 +639,7 @@ router.put('/provider-settings/:provider', async (req, res) => {
       return res.status(400).json({ error: 'Invalid JSON content' });
     }
 
-    const settingsPath = getSettingsPath(req, provider)();
+    const settingsPath = getSettingsPath(req, provider);
     const settingsDir = path.dirname(settingsPath);
 
     // Ensure directory exists

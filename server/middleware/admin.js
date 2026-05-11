@@ -11,7 +11,7 @@ export const requireAdmin = (req, res, next) => {
     return res.status(401).json({ error: 'Authentication required' });
   }
 
-  if (req.user.role !== 'admin') {
+  if (req.user.role !== 'admin' && req.user.role !== 'superadmin') {
     return res.status(403).json({ error: 'Admin access required' });
   }
 
@@ -23,6 +23,6 @@ export const requireAdmin = (req, res, next) => {
  */
 export const optionalAdmin = (req, res, next) => {
   // Add isAdmin helper to request
-  req.isAdmin = req.user?.role === 'admin';
+  req.isAdmin = req.user?.role === 'admin' || req.user?.role === 'superadmin';
   next();
 };
