@@ -289,6 +289,7 @@ export type ProjectRepositoryRow = {
   custom_project_name: string | null;
   isStarred: number;
   isArchived: number;
+  user_id: number | null;
 };
 
 /**

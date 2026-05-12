@@ -5,9 +5,14 @@ import { userDb, appConfigDb } from '../modules/database/index.js';
 import { getConnection } from '../modules/database/connection.js';
 import { generateToken, authenticateToken } from '../middleware/auth.js';
 import { getLinuxUserInfo, authenticateWithLinux } from '../modules/auth/linux-pam-auth.js';
+import { findAppRoot, getModuleDir } from '../utils/runtime-paths.js';
 
 const router = express.Router();
 const db = getConnection();
+
+// Superadmin is a virtual user (not a Linux user). Its workspace is the app source directory,
+// not a PAM user's home directory.
+const SUPERADMIN_HOME_DIR = findAppRoot(getModuleDir(import.meta.url));
 
 // Get current auth mode
 function getAuthMode() {
@@ -56,6 +61,12 @@ router.post('/register', async (req, res) => {
 
       // Create user with role
       const user = userDb.createUser(username, passwordHash, role);
+
+      // Set home_dir for superadmin — it's a virtual user, not a Linux user,
+      // so its workspace is the app source directory, not a PAM user's home.
+      if (role === 'superadmin') {
+        userDb.updateUser(user.id, { home_dir: SUPERADMIN_HOME_DIR });
+      }
 
       // Generate token
       const token = generateToken({ ...user, role });
@@ -107,11 +118,8 @@ router.post('/login', async (req, res) => {
           return res.status(401).json({ error: 'Invalid username or password' });
         }
 
-        // Update home_dir for superadmin
-        const userHomeDir = os.homedir();
-        if (existingUser.home_dir !== userHomeDir) {
-          userDb.updateUser(existingUser.id, { home_dir: userHomeDir });
-        }
+        // Use existing home_dir from database; fallback to app source directory for superadmin
+        const userHomeDir = existingUser.home_dir || SUPERADMIN_HOME_DIR;
 
         const token = generateToken({ ...existingUser, home_dir: userHomeDir });
         userDb.updateLastLogin(existingUser.id);
@@ -187,15 +195,11 @@ router.post('/login', async (req, res) => {
       return res.status(401).json({ error: 'Invalid username or password' });
     }
 
-    // Update home_dir from OS for database auth users
-    const userHomeDir = os.homedir();
-    if (user.home_dir !== userHomeDir) {
-      userDb.updateUser(user.id, { home_dir: userHomeDir });
-      user = { ...user, home_dir: userHomeDir };
-    }
+    // Use existing home_dir from database; superadmin falls back to app source directory
+    const userHomeDir = user.home_dir || (user.role === 'superadmin' ? SUPERADMIN_HOME_DIR : os.homedir());
 
-    // Generate token
-    const token = generateToken(user);
+    // Generate token with resolved home_dir
+    const token = generateToken({ ...user, home_dir: userHomeDir });
 
     // Update last login
     userDb.updateLastLogin(user.id);

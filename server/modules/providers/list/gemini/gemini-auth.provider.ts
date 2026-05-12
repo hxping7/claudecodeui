@@ -32,7 +32,7 @@ export class GeminiProviderAuth implements IProviderAuth {
   /**
    * Returns Gemini CLI installation and credential status.
    */
-  async getStatus(): Promise<ProviderAuthStatus> {
+  async getStatus(homeDir?: string): Promise<ProviderAuthStatus> {
     const installed = this.checkInstalled();
 
     if (!installed) {
@@ -46,7 +46,7 @@ export class GeminiProviderAuth implements IProviderAuth {
       };
     }
 
-    const credentials = await this.checkCredentials();
+    const credentials = await this.checkCredentials(homeDir);
 
     return {
       installed,
@@ -61,13 +61,13 @@ export class GeminiProviderAuth implements IProviderAuth {
   /**
    * Checks Gemini credentials from API key env vars or local OAuth credential files.
    */
-  private async checkCredentials(): Promise<GeminiCredentialsStatus> {
+  private async checkCredentials(homeDir?: string): Promise<GeminiCredentialsStatus> {
     if (process.env.GEMINI_API_KEY?.trim()) {
       return { authenticated: true, email: 'API Key Auth', method: 'api_key' };
     }
 
     try {
-      const credsPath = path.join(os.homedir(), '.gemini', 'oauth_creds.json');
+      const credsPath = path.join(homeDir || os.homedir(), '.gemini', 'oauth_creds.json');
       const content = await readFile(credsPath, 'utf8');
       const creds = readObjectRecord(JSON.parse(content)) ?? {};
       const accessToken = readOptionalString(creds.access_token);
@@ -102,7 +102,7 @@ export class GeminiProviderAuth implements IProviderAuth {
 
       return {
         authenticated: true,
-        email: await this.getActiveAccountEmail() || 'OAuth Session',
+        email: await this.getActiveAccountEmail(homeDir) || 'OAuth Session',
         method: 'credentials_file',
       };
     } catch {
@@ -138,9 +138,9 @@ export class GeminiProviderAuth implements IProviderAuth {
   /**
    * Reads Gemini's active local Google account as an offline fallback for display.
    */
-  private async getActiveAccountEmail(): Promise<string | null> {
+  private async getActiveAccountEmail(homeDir?: string): Promise<string | null> {
     try {
-      const accPath = path.join(os.homedir(), '.gemini', 'google_accounts.json');
+      const accPath = path.join(homeDir || os.homedir(), '.gemini', 'google_accounts.json');
       const accContent = await readFile(accPath, 'utf8');
       const accounts = readObjectRecord(JSON.parse(accContent));
       return readOptionalString(accounts?.active) ?? null;

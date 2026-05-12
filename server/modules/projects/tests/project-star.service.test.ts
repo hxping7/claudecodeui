@@ -4,6 +4,7 @@ import test from 'node:test';
 import { projectsDb } from '@/modules/database/index.js';
 import { applyLegacyStarredProjectIds, toggleProjectStar } from '@/modules/projects/services/project-star.service.js';
 import { AppError } from '@/shared/utils.js';
+import type { ProjectRepositoryRow } from '@/shared/types.js';
 
 type ProjectRow = {
   project_id: string;
@@ -11,6 +12,7 @@ type ProjectRow = {
   custom_project_name: string | null;
   isStarred: number;
   isArchived: number;
+  user_id: number | null;
 };
 
 test('toggleProjectStar throws when projectId is missing', () => {
@@ -54,6 +56,7 @@ test('toggleProjectStar flips star state and persists it', () => {
         custom_project_name: 'project-1',
         isStarred: 0,
         isArchived: 0,
+        user_id: null,
       }) as ProjectRow;
     projectsDb.updateProjectIsStarredById = (projectId: string, isStarred: boolean) => {
       capturedProjectId = projectId;
@@ -86,7 +89,8 @@ test('applyLegacyStarredProjectIds stars only valid, unstarred projects', () => 
           custom_project_name: 'A',
           isStarred: 0,
           isArchived: 0,
-        } as ProjectRow;
+          user_id: null,
+        } as ProjectRepositoryRow;
       }
 
       if (projectId === 'project-b') {
@@ -96,7 +100,8 @@ test('applyLegacyStarredProjectIds stars only valid, unstarred projects', () => 
           custom_project_name: 'B',
           isStarred: 1,
           isArchived: 0,
-        } as ProjectRow;
+          user_id: null,
+        } as ProjectRepositoryRow;
       }
 
       return null;

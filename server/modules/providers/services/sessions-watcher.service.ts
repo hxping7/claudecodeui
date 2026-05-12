@@ -8,31 +8,45 @@ import { sessionSynchronizerService } from '@/modules/providers/services/session
 import { WS_OPEN_STATE, connectedClients } from '@/modules/websocket/index.js';
 import type { LLMProvider } from '@/shared/types.js';
 import { getProjectsWithSessions } from '@/modules/projects/index.js';
+import { userDb } from '@/modules/database/index.js';
 
 type WatcherEventType = 'add' | 'change';
 
-const PROVIDER_WATCH_PATHS: Array<{ provider: LLMProvider; rootPath: string }> = [
-  {
-    provider: 'claude',
-    rootPath: path.join(os.homedir(), '.claude', 'projects'),
-  },
-  {
-    provider: 'cursor',
-    rootPath: path.join(os.homedir(), '.cursor', 'chats'),
-  },
-  {
-    provider: 'codex',
-    rootPath: path.join(os.homedir(), '.codex', 'sessions'),
-  },
-  {
-    provider: 'gemini',
-    rootPath: path.join(os.homedir(), '.gemini', 'sessions'),
-  },
-  {
-    provider: 'gemini',
-    rootPath: path.join(os.homedir(), '.gemini', 'tmp'),
-  },
-];
+/**
+ * Builds watch paths for all user home directories.
+ * In PAM mode, each user has their own home_dir.
+ */
+function buildProviderWatchPaths(): Array<{ provider: LLMProvider; rootPath: string }> {
+  const paths: Array<{ provider: LLMProvider; rootPath: string }> = [];
+
+  // Collect all distinct user home directories
+  const homeDirs = new Set<string>();
+  try {
+    const users = userDb.getAllActiveUsers();
+    for (const user of users) {
+      if (user.home_dir) {
+        homeDirs.add(user.home_dir);
+      }
+    }
+  } catch {
+    // Database may not be ready during early startup
+  }
+  if (homeDirs.size === 0) {
+    homeDirs.add(os.homedir());
+  }
+
+  for (const homeDir of homeDirs) {
+    paths.push(
+      { provider: 'claude', rootPath: path.join(homeDir, '.claude', 'projects') },
+      { provider: 'cursor', rootPath: path.join(homeDir, '.cursor', 'chats') },
+      { provider: 'codex', rootPath: path.join(homeDir, '.codex', 'sessions') },
+      { provider: 'gemini', rootPath: path.join(homeDir, '.gemini', 'sessions') },
+      { provider: 'gemini', rootPath: path.join(homeDir, '.gemini', 'tmp') },
+    );
+  }
+
+  return paths;
+}
 
 const WATCHER_IGNORED_PATTERNS = [
   '**/node_modules/**',
@@ -221,7 +235,7 @@ export async function initializeSessionsWatcher(): Promise<void> {
     failures: initialSync.failures,
   });
 
-  for (const { provider, rootPath } of PROVIDER_WATCH_PATHS) {
+  for (const { provider, rootPath } of buildProviderWatchPaths()) {
     try {
       await fsPromises.mkdir(rootPath, { recursive: true });
 

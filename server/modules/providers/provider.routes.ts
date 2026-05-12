@@ -242,7 +242,8 @@ router.get(
   '/:provider/auth/status',
   asyncHandler(async (req: Request, res: Response) => {
     const provider = parseProvider(req.params.provider);
-    const status = await providerAuthService.getProviderAuthStatus(provider);
+    const homeDir = (req.user as { home_dir?: string } | undefined)?.home_dir;
+    const status = await providerAuthService.getProviderAuthStatus(provider, homeDir);
     res.json(createApiSuccessResponse(status));
   }),
 );
@@ -254,14 +255,15 @@ router.get(
     const provider = parseProvider(req.params.provider);
     const workspacePath = readOptionalQueryString(req.query.workspacePath);
     const scope = parseMcpScope(req.query.scope);
+    const homeDir = (req.user as { home_dir?: string } | undefined)?.home_dir;
 
     if (scope) {
-      const servers = await providerMcpService.listProviderMcpServersForScope(provider, scope, { workspacePath });
+      const servers = await providerMcpService.listProviderMcpServersForScope(provider, scope, { workspacePath, homeDir });
       res.json(createApiSuccessResponse({ provider, scope, servers }));
       return;
     }
 
-    const groupedServers = await providerMcpService.listProviderMcpServers(provider, { workspacePath });
+    const groupedServers = await providerMcpService.listProviderMcpServers(provider, { workspacePath, homeDir });
     res.json(createApiSuccessResponse({ provider, scopes: groupedServers }));
   }),
 );
@@ -270,8 +272,9 @@ router.post(
   '/:provider/mcp/servers',
   asyncHandler(async (req: Request, res: Response) => {
     const provider = parseProvider(req.params.provider);
+    const homeDir = (req.user as { home_dir?: string } | undefined)?.home_dir;
     const payload = parseMcpUpsertPayload(req.body);
-    const server = await providerMcpService.upsertProviderMcpServer(provider, payload);
+    const server = await providerMcpService.upsertProviderMcpServer(provider, { ...payload, homeDir });
     res.status(201).json(createApiSuccessResponse({ server }));
   }),
 );
@@ -282,10 +285,12 @@ router.delete(
     const provider = parseProvider(req.params.provider);
     const scope = parseMcpScope(req.query.scope);
     const workspacePath = readOptionalQueryString(req.query.workspacePath);
+    const homeDir = (req.user as { home_dir?: string } | undefined)?.home_dir;
     const result = await providerMcpService.removeProviderMcpServer(provider, {
       name: readPathParam(req.params.name, 'name'),
       scope,
       workspacePath,
+      homeDir,
     });
     res.json(createApiSuccessResponse(result));
   }),

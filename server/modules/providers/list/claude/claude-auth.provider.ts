@@ -33,7 +33,7 @@ export class ClaudeProviderAuth implements IProviderAuth {
   /**
    * Returns Claude installation and credential status using Claude Code's auth priority.
    */
-  async getStatus(): Promise<ProviderAuthStatus> {
+  async getStatus(homeDir?: string): Promise<ProviderAuthStatus> {
     const installed = this.checkInstalled();
 
     if (!installed) {
@@ -47,7 +47,7 @@ export class ClaudeProviderAuth implements IProviderAuth {
       };
     }
 
-    const credentials = await this.checkCredentials();
+    const credentials = await this.checkCredentials(homeDir);
 
     return {
       installed,
@@ -62,9 +62,9 @@ export class ClaudeProviderAuth implements IProviderAuth {
   /**
    * Reads Claude settings env values that the CLI can use even when the server process env is empty.
    */
-  private async loadSettingsEnv(): Promise<Record<string, unknown>> {
+  private async loadSettingsEnv(homeDir?: string): Promise<Record<string, unknown>> {
     try {
-      const settingsPath = path.join(os.homedir(), '.claude', 'settings.json');
+      const settingsPath = path.join(homeDir || os.homedir(), '.claude', 'settings.json');
       const content = await readFile(settingsPath, 'utf8');
       const settings = readObjectRecord(JSON.parse(content));
       return readObjectRecord(settings?.env) ?? {};
@@ -76,12 +76,12 @@ export class ClaudeProviderAuth implements IProviderAuth {
   /**
    * Checks Claude credentials in the same priority order used by Claude Code.
    */
-  private async checkCredentials(): Promise<ClaudeCredentialsStatus> {
+  private async checkCredentials(homeDir?: string): Promise<ClaudeCredentialsStatus> {
     if (process.env.ANTHROPIC_API_KEY?.trim()) {
       return { authenticated: true, email: 'API Key Auth', method: 'api_key' };
     }
 
-    const settingsEnv = await this.loadSettingsEnv();
+    const settingsEnv = await this.loadSettingsEnv(homeDir);
     if (readOptionalString(settingsEnv.ANTHROPIC_API_KEY)) {
       return { authenticated: true, email: 'API Key Auth', method: 'api_key' };
     }
@@ -91,7 +91,7 @@ export class ClaudeProviderAuth implements IProviderAuth {
     }
 
     try {
-      const credPath = path.join(os.homedir(), '.claude', '.credentials.json');
+      const credPath = path.join(homeDir || os.homedir(), '.claude', '.credentials.json');
       const content = await readFile(credPath, 'utf8');
       const creds = readObjectRecord(JSON.parse(content)) ?? {};
       const oauth = readObjectRecord(creds.claudeAiOauth);

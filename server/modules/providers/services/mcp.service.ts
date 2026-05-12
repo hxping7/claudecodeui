@@ -20,7 +20,7 @@ export const providerMcpService = {
    */
   async listProviderMcpServers(
     providerName: string,
-    options?: { workspacePath?: string },
+    options?: { workspacePath?: string; homeDir?: string },
   ): Promise<Record<McpScope, ProviderMcpServer[]>> {
     const provider = providerRegistry.resolveProvider(providerName);
     return provider.mcp.listServers(options);
@@ -32,7 +32,7 @@ export const providerMcpService = {
   async listProviderMcpServersForScope(
     providerName: string,
     scope: McpScope,
-    options?: { workspacePath?: string },
+    options?: { workspacePath?: string; homeDir?: string },
   ): Promise<ProviderMcpServer[]> {
     const provider = providerRegistry.resolveProvider(providerName);
     return provider.mcp.listServersForScope(scope, options);
@@ -43,7 +43,7 @@ export const providerMcpService = {
    */
   async upsertProviderMcpServer(
     providerName: string,
-    input: UpsertProviderMcpServerInput,
+    input: UpsertProviderMcpServerInput & { homeDir?: string },
   ): Promise<ProviderMcpServer> {
     const provider = providerRegistry.resolveProvider(providerName);
     return provider.mcp.upsertServer(input);
@@ -54,7 +54,7 @@ export const providerMcpService = {
    */
   async removeProviderMcpServer(
     providerName: string,
-    input: { name: string; scope?: McpScope; workspacePath?: string },
+    input: { name: string; scope?: McpScope; workspacePath?: string; homeDir?: string },
   ): Promise<{ removed: boolean; provider: LLMProvider; name: string; scope: McpScope }> {
     const provider = providerRegistry.resolveProvider(providerName);
     return provider.mcp.removeServer(input);

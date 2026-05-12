@@ -203,7 +203,7 @@ export function normalizeProjectPath(inputPath: string): string {
  * The function resolves symlinks, enforces `WORKSPACES_ROOT` containment, and
  * blocks known system directories.
  */
-export async function validateWorkspacePath(requestedPath: string): Promise<WorkspacePathValidationResult> {
+export async function validateWorkspacePath(requestedPath: string, workspaceRoot?: string): Promise<WorkspacePathValidationResult> {
   try {
     const normalizedRequestedPath = normalizeProjectPath(requestedPath);
     if (!normalizedRequestedPath) {
@@ -266,14 +266,15 @@ export async function validateWorkspacePath(requestedPath: string): Promise<Work
       }
     }
 
-    const resolvedWorkspaceRoot = normalizeProjectPath(await realpath(WORKSPACES_ROOT));
+    const effectiveRoot = workspaceRoot || WORKSPACES_ROOT;
+    const resolvedWorkspaceRoot = normalizeProjectPath(await realpath(effectiveRoot));
     if (
       !resolvedPath.startsWith(`${resolvedWorkspaceRoot}${path.sep}`)
       && resolvedPath !== resolvedWorkspaceRoot
     ) {
       return {
         valid: false,
-        error: `Workspace path must be within the allowed workspace root: ${WORKSPACES_ROOT}`,
+        error: `Workspace path must be within the allowed workspace root: ${effectiveRoot}`,
       };
     }
 

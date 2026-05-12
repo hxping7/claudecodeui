@@ -18,14 +18,14 @@ export class ClaudeMcpProvider extends McpProvider {
     super('claude', ['user', 'local', 'project'], ['stdio', 'http', 'sse']);
   }
 
-  protected async readScopedServers(scope: McpScope, workspacePath: string): Promise<Record<string, unknown>> {
+  protected async readScopedServers(scope: McpScope, workspacePath: string, homeDir: string): Promise<Record<string, unknown>> {
     if (scope === 'project') {
       const filePath = path.join(workspacePath, '.mcp.json');
       const config = await readJsonConfig(filePath);
       return readObjectRecord(config.mcpServers) ?? {};
     }
 
-    const filePath = path.join(os.homedir(), '.claude.json');
+    const filePath = path.join(homeDir, '.claude.json');
     const config = await readJsonConfig(filePath);
     if (scope === 'user') {
       return readObjectRecord(config.mcpServers) ?? {};
@@ -40,6 +40,7 @@ export class ClaudeMcpProvider extends McpProvider {
     scope: McpScope,
     workspacePath: string,
     servers: Record<string, unknown>,
+    homeDir: string,
   ): Promise<void> {
     if (scope === 'project') {
       const filePath = path.join(workspacePath, '.mcp.json');
@@ -49,7 +50,7 @@ export class ClaudeMcpProvider extends McpProvider {
       return;
     }
 
-    const filePath = path.join(os.homedir(), '.claude.json');
+    const filePath = path.join(homeDir, '.claude.json');
     const config = await readJsonConfig(filePath);
     if (scope === 'user') {
       config.mcpServers = servers;

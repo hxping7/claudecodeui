@@ -28,7 +28,8 @@ async function removeFileIfExists(filePath: string): Promise<boolean> {
 
 /**
  * Verifies that the session belongs to the given user.
- * Allows access to sessions without user_id (legacy data) for backwards compatibility.
+ * Rejects sessions with null user_id when a userId is provided — new sessions
+ * should always have user_id set via inference in createSession.
  * @throws AppError if session not found or doesn't belong to user
  */
 function verifySessionOwnership(sessionId: string, userId: number): void {
@@ -39,9 +40,8 @@ function verifySessionOwnership(sessionId: string, userId: number): void {
       statusCode: 404,
     });
   }
-  // Allow access to legacy sessions without user_id
-  if (session.user_id !== undefined && session.user_id !== userId) {
-    // Return generic "not found" to avoid revealing session existence
+  // Reject if session has no user_id (shouldn't happen for new data) or belongs to another user
+  if (session.user_id === null || session.user_id !== userId) {
     throw new AppError(`Session "${sessionId}" was not found.`, {
       code: 'SESSION_NOT_FOUND',
       statusCode: 404,
@@ -102,8 +102,8 @@ export const sessionsService = {
       } satisfies FetchHistoryResult);
     }
 
-    // Verify ownership if userId provided - allow legacy sessions without user_id
-    if (userId !== undefined && session.user_id !== undefined && session.user_id !== userId) {
+    // Verify ownership if userId provided - reject sessions with null or mismatched user_id
+    if (userId !== undefined && (session.user_id === null || session.user_id !== userId)) {
       return Promise.resolve({
         messages: [],
         total: 0,

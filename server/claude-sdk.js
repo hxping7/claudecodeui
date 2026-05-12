@@ -505,7 +505,7 @@ async function cleanupTempFiles(tempImagePaths, tempDir) {
  */
 async function loadMcpConfig(cwd) {
   try {
-    const claudeConfigPath = path.join(os.homedir(), '.claude.json');
+    const claudeConfigPath = path.join(getCurrentUserHomeDir(), '.claude.json');
 
     // Check if config file exists
     try {

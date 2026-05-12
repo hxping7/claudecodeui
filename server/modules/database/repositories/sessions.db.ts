@@ -1,5 +1,5 @@
 import { getConnection } from '@/modules/database/connection.js';
-import { projectsDb } from '@/modules/database/repositories/projects.db.js';
+import { projectsDb, userDb } from '@/modules/database/index.js';
 import { normalizeProjectPath } from '@/shared/utils.js';
 
 type SessionRow = {
@@ -34,18 +34,48 @@ function normalizeTimestamp(value?: string): string | null {
  * If multiple projects share the same path, returns the first active one.
  * If no project exists, creates one automatically.
  */
-function resolveOrCreateProjectIdFromPath(projectPath: string): string | null {
+/**
+ * Infers a user_id from a project path by matching against user home directories.
+ * Falls back to null if no match found.
+ */
+function inferUserIdFromPath(projectPath: string): number | null {
+  try {
+    const users = userDb.getAllActiveUsers();
+    // Sort by home_dir length descending so longer (more specific) paths match first
+    const sorted = [...users].sort((a, b) => (b.home_dir?.length ?? 0) - (a.home_dir?.length ?? 0));
+    for (const user of sorted) {
+      if (user.home_dir && projectPath.startsWith(user.home_dir)) {
+        return user.id;
+      }
+    }
+  } catch {
+    // Database may not be ready
+  }
+  return null;
+}
+
+function resolveOrCreateProjectIdFromPath(projectPath: string, userId?: number): string | null {
   const normalizedPath = normalizeProjectPath(projectPath);
   const projects = projectsDb.getProjectsByPath(normalizedPath);
 
   if (projects.length > 0) {
+    // Prefer the project matching the given userId, otherwise take the first one
+    if (userId) {
+      const userProject = projects.find(p => p.user_id === userId);
+      if (userProject) {
+        return userProject.project_id;
+      }
+    }
     return projects[0].project_id;
   }
 
+  // If userId not provided, try to infer from path
+  const effectiveUserId = userId ?? inferUserIdFromPath(normalizedPath);
+
   // No project found, create one automatically
-  const result = projectsDb.createProjectPath(normalizedPath, null);
+  const result = projectsDb.createProjectPath(normalizedPath, null, effectiveUserId ?? undefined);
   if (result.outcome === 'created' && result.project) {
-    console.log(`[Sessions] Auto-created project for path: ${normalizedPath}`);
+    console.log(`[Sessions] Auto-created project for path: ${normalizedPath}, user_id: ${effectiveUserId ?? null}`);
     return result.project.project_id;
   }
 
@@ -76,13 +106,23 @@ export const sessionsDb = {
     let projectId: string | null = projectIdOrPath;
     const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(projectIdOrPath);
     if (!isUuid) {
-      projectId = resolveOrCreateProjectIdFromPath(projectIdOrPath);
+      projectId = resolveOrCreateProjectIdFromPath(projectIdOrPath, userId);
     }
 
     // If no project found, we can't create the session (foreign key constraint)
     if (!projectId) {
       console.warn(`[Sessions] Cannot create session ${sessionId}: failed to resolve project for ${projectIdOrPath}`);
       return sessionId;
+    }
+
+    // Determine effective userId: use provided value, then infer from path, then from project row
+    let effectiveUserId = userId ?? null;
+    if (!effectiveUserId && !isUuid) {
+      effectiveUserId = inferUserIdFromPath(projectIdOrPath);
+    }
+    if (!effectiveUserId && projectId) {
+      const project = projectsDb.getProjectById(projectId);
+      effectiveUserId = project?.user_id ?? null;
     }
 
     db.prepare(
@@ -93,7 +133,7 @@ export const sessionsDb = {
          updated_at = excluded.updated_at,
          project_id = excluded.project_id,
          jsonl_path = excluded.jsonl_path,
-         user_id = excluded.user_id,
+         user_id = COALESCE(excluded.user_id, sessions.user_id),
          custom_name = COALESCE(excluded.custom_name, sessions.custom_name)`
     ).run(
       sessionId,
@@ -101,7 +141,7 @@ export const sessionsDb = {
       customName ?? null,
       projectId,
       jsonlPath ?? null,
-      userId ?? null,
+      effectiveUserId,
       createdAtValue,
       updatedAtValue
     );

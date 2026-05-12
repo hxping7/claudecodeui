@@ -1,3 +1,4 @@
+import os from 'node:os';
 import path from 'node:path';
 
 import type { IProviderMcp } from '@/shared/interfaces.js';
@@ -19,6 +20,8 @@ const normalizeServerName = (name: string): string => {
   return normalized;
 };
 
+type McpOptions = { workspacePath?: string; homeDir?: string };
+
 /**
  * Shared MCP provider for provider-specific config readers/writers.
  */
@@ -37,7 +40,11 @@ export abstract class McpProvider implements IProviderMcp {
     this.supportedTransports = supportedTransports;
   }
 
-  async listServers(options?: { workspacePath?: string }): Promise<Record<McpScope, ProviderMcpServer[]>> {
+  protected resolveHomeDir(homeDir?: string): string {
+    return homeDir || os.homedir();
+  }
+
+  async listServers(options?: McpOptions): Promise<Record<McpScope, ProviderMcpServer[]>> {
     const grouped: Record<McpScope, ProviderMcpServer[]> = {
       user: [],
       local: [],
@@ -53,28 +60,30 @@ export abstract class McpProvider implements IProviderMcp {
 
   async listServersForScope(
     scope: McpScope,
-    options?: { workspacePath?: string },
+    options?: McpOptions,
   ): Promise<ProviderMcpServer[]> {
     if (!this.supportedScopes.includes(scope)) {
       return [];
     }
 
     const workspacePath = resolveWorkspacePath(options?.workspacePath);
-    const scopedServers = await this.readScopedServers(scope, workspacePath);
+    const homeDir = this.resolveHomeDir(options?.homeDir);
+    const scopedServers = await this.readScopedServers(scope, workspacePath, homeDir);
     return Object.entries(scopedServers)
       .map(([name, rawConfig]) => this.normalizeServerConfig(scope, name, rawConfig))
       .filter((entry): entry is ProviderMcpServer => entry !== null);
   }
 
-  async upsertServer(input: UpsertProviderMcpServerInput): Promise<ProviderMcpServer> {
+  async upsertServer(input: UpsertProviderMcpServerInput & { homeDir?: string }): Promise<ProviderMcpServer> {
     const scope = input.scope ?? 'project';
     this.assertScopeAndTransport(scope, input.transport);
 
     const workspacePath = resolveWorkspacePath(input.workspacePath);
+    const homeDir = this.resolveHomeDir(input.homeDir);
     const normalizedName = normalizeServerName(input.name);
-    const scopedServers = await this.readScopedServers(scope, workspacePath);
+    const scopedServers = await this.readScopedServers(scope, workspacePath, homeDir);
     scopedServers[normalizedName] = this.buildServerConfig(input);
-    await this.writeScopedServers(scope, workspacePath, scopedServers);
+    await this.writeScopedServers(scope, workspacePath, scopedServers, homeDir);
 
     return {
       provider: this.provider,
@@ -94,18 +103,19 @@ export abstract class McpProvider implements IProviderMcp {
   }
 
   async removeServer(
-    input: { name: string; scope?: McpScope; workspacePath?: string },
+    input: { name: string; scope?: McpScope; workspacePath?: string; homeDir?: string },
   ): Promise<{ removed: boolean; provider: LLMProvider; name: string; scope: McpScope }> {
     const scope = input.scope ?? 'project';
     this.assertScope(scope);
 
     const workspacePath = resolveWorkspacePath(input.workspacePath);
+    const homeDir = this.resolveHomeDir(input.homeDir);
     const normalizedName = normalizeServerName(input.name);
-    const scopedServers = await this.readScopedServers(scope, workspacePath);
+    const scopedServers = await this.readScopedServers(scope, workspacePath, homeDir);
     const removed = Object.prototype.hasOwnProperty.call(scopedServers, normalizedName);
     if (removed) {
       delete scopedServers[normalizedName];
-      await this.writeScopedServers(scope, workspacePath, scopedServers);
+      await this.writeScopedServers(scope, workspacePath, scopedServers, homeDir);
     }
 
     return { removed, provider: this.provider, name: normalizedName, scope };
@@ -114,12 +124,14 @@ export abstract class McpProvider implements IProviderMcp {
   protected abstract readScopedServers(
     scope: McpScope,
     workspacePath: string,
+    homeDir: string,
   ): Promise<Record<string, unknown>>;
 
   protected abstract writeScopedServers(
     scope: McpScope,
     workspacePath: string,
     servers: Record<string, unknown>,
+    homeDir: string,
   ): Promise<void>;
 
   protected abstract buildServerConfig(input: UpsertProviderMcpServerInput): Record<string, unknown>;

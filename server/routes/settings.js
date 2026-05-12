@@ -14,15 +14,15 @@ const router = express.Router();
 // Helper to get current user's home directory with path validation
 const getCurrentUserHomeDir = (req) => {
   const userHome = req.user?.home_dir || os.homedir();
-  // Validate it's within /home or /root
-  if (!userHome.startsWith('/home/') && !userHome.startsWith('/root')) {
+  // Validate it's an absolute path (superadmin uses app source directory)
+  if (!path.isAbsolute(userHome)) {
     console.error('Invalid home directory path:', userHome);
     return os.homedir();
   }
   return userHome;
 };
 
-// Configure multer for logo uploads
+// Configure multer for logo uploads (admin-only feature, shared path is fine)
 const logosDir = path.join(os.homedir(), '.cloudcli', 'logos');
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {

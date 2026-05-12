@@ -13,6 +13,18 @@ router.delete('/sessions/:sessionId', async (req, res) => {
             return res.status(400).json({ success: false, error: 'Invalid session ID format' });
         }
 
+        // Verify session ownership in PAM mode
+        const userId = req.user?.id;
+        if (userId) {
+            const session = sessionsDb.getSessionById(sessionId);
+            if (!session) {
+                return res.status(404).json({ success: false, error: 'Session not found' });
+            }
+            if (session.user_id !== null && session.user_id !== userId) {
+                return res.status(404).json({ success: false, error: 'Session not found' });
+            }
+        }
+
         await sessionManager.deleteSession(sessionId);
         sessionsDb.deleteSessionById(sessionId);
         res.json({ success: true });

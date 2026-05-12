@@ -591,6 +591,73 @@ const fixNullUserIdInProjectsAndSessions = (db: Database): void => {
   }
 };
 
+/**
+ * Resets the superadmin's home_dir to NULL.
+ * Superadmin is a virtual user (not a Linux user); its workspace is resolved at
+ * login time to the app source directory. Keeping home_dir set to a PAM user's
+ * home directory would cause cross-user data leakage.
+ */
+const resetSuperadminHomeDir = (db: Database): void => {
+  const superadmin = db
+    .prepare("SELECT id, home_dir FROM users WHERE role = 'superadmin' LIMIT 1")
+    .get() as { id: number; home_dir: string | null } | undefined;
+
+  if (!superadmin || superadmin.home_dir === null) {
+    return;
+  }
+
+  db.prepare('UPDATE users SET home_dir = NULL WHERE id = ?').run(superadmin.id);
+  console.log(`Migration: Reset superadmin home_dir from "${superadmin.home_dir}" to NULL (resolved at runtime)`);
+};
+
+/**
+ * Reassigns projects/sessions that belong to PAM users but were incorrectly
+ * assigned to the superadmin. This happens because superadmin's home_dir was
+ * previously set to a PAM user's home directory (e.g. /home/hxp), causing
+ * projects under that path to be created with superadmin's user_id.
+ *
+ * After this, any project whose path starts with a PAM user's home_dir and is
+ * still owned by superadmin gets reassigned to that PAM user.
+ */
+const reassignSuperadminProjectsToPamUsers = (db: Database): void => {
+  // Get superadmin id
+  const superadmin = db
+    .prepare("SELECT id FROM users WHERE role = 'superadmin' LIMIT 1")
+    .get() as { id: number } | undefined;
+  if (!superadmin) return;
+
+  // Get all PAM users (non-superadmin) with home_dir
+  const pamUsers = db
+    .prepare("SELECT id, home_dir FROM users WHERE role != 'superadmin' AND home_dir IS NOT NULL")
+    .all() as Array<{ id: number; home_dir: string }>;
+
+  // Sort by home_dir length descending for most-specific match first
+  const sorted = [...pamUsers].sort((a, b) => b.home_dir.length - a.home_dir.length);
+
+  // Find superadmin's projects
+  const superadminProjects = db
+    .prepare('SELECT project_id, project_path FROM projects WHERE user_id = ?')
+    .all(superadmin.id) as Array<{ project_id: string; project_path: string }>;
+
+  let reassignedProjects = 0;
+
+  for (const project of superadminProjects) {
+    for (const pamUser of sorted) {
+      if (project.project_path.startsWith(pamUser.home_dir)) {
+        db.prepare('UPDATE projects SET user_id = ? WHERE project_id = ?').run(pamUser.id, project.project_id);
+        db.prepare('UPDATE sessions SET user_id = ? WHERE project_id = ?').run(pamUser.id, project.project_id);
+        reassignedProjects++;
+        console.log(`Migration: Reassigned project "${project.project_path}" from superadmin to user ${pamUser.id} (${pamUser.home_dir})`);
+        break;
+      }
+    }
+  }
+
+  if (reassignedProjects > 0) {
+    console.log(`Migration: Reassigned ${reassignedProjects} projects from superadmin to PAM users`);
+  }
+};
+
 export const runMigrations = (db: Database) => {
   try {
     const usersTableInfo = db.prepare('PRAGMA table_info(users)').all() as { name: string }[];
@@ -701,6 +768,16 @@ export const runMigrations = (db: Database) => {
 
     // Migration: Fix null user_id in projects and sessions (assign to superadmin)
     fixNullUserIdInProjectsAndSessions(db);
+
+    // Migration: Clear superadmin home_dir — it's a virtual user whose workspace
+    // is determined at runtime (the app source directory), not a PAM user's home.
+    // This prevents superadmin from sharing a PAM user's home directory.
+    resetSuperadminHomeDir(db);
+
+    // Migration: Reassign projects/sessions that belong to PAM users but were
+    // incorrectly assigned to superadmin (because superadmin's home_dir used to
+    // point to a PAM user's home directory).
+    reassignSuperadminProjectsToPamUsers(db);
 
     console.log('Database migrations completed successfully');
   } catch (error: any) {

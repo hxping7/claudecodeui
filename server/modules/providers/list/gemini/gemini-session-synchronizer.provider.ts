@@ -31,31 +31,35 @@ type GeminiJsonlMetadata = {
  */
 export class GeminiSessionSynchronizer implements IProviderSessionSynchronizer {
   private readonly provider = 'gemini' as const;
-  private readonly geminiHome = path.join(os.homedir(), '.gemini');
+
+  private resolveHome(homeDir?: string): string {
+    return path.join(homeDir || os.homedir(), '.gemini');
+  }
 
   /**
    * Scans Gemini legacy JSON and new JSONL artifacts and upserts sessions into DB.
    */
-  async synchronize(since?: Date): Promise<number> {
+  async synchronize(since?: Date, homeDir?: string): Promise<number> {
+    const geminiHome = this.resolveHome(homeDir);
     const projectHashLookup = this.buildProjectHashLookup();
 
     const legacySessionFiles = await findFilesRecursivelyCreatedAfter(
-      path.join(this.geminiHome, 'sessions'),
+      path.join(geminiHome, 'sessions'),
       '.json',
       since ?? null
     );
     const legacyTempFiles = await findFilesRecursivelyCreatedAfter(
-      path.join(this.geminiHome, 'tmp'),
+      path.join(geminiHome, 'tmp'),
       '.json',
       since ?? null
     );
     const jsonlSessionFiles = await findFilesRecursivelyCreatedAfter(
-      path.join(this.geminiHome, 'sessions'),
+      path.join(geminiHome, 'sessions'),
       '.jsonl',
       since ?? null
     );
     const jsonlTempFiles = await findFilesRecursivelyCreatedAfter(
-      path.join(this.geminiHome, 'tmp'),
+      path.join(geminiHome, 'tmp'),
       '.jsonl',
       since ?? null
     );
@@ -71,7 +75,7 @@ export class GeminiSessionSynchronizer implements IProviderSessionSynchronizer {
 
     let processed = 0;
     for (const filePath of files) {
-      if (this.shouldSkipTempArtifact(filePath)) {
+      if (this.shouldSkipTempArtifact(filePath, homeDir)) {
         continue;
       }
 
@@ -101,12 +105,12 @@ export class GeminiSessionSynchronizer implements IProviderSessionSynchronizer {
   /**
    * Parses and upserts one Gemini legacy JSON or JSONL artifact.
    */
-  async synchronizeFile(filePath: string): Promise<string | null> {
+  async synchronizeFile(filePath: string, homeDir?: string): Promise<string | null> {
     if (!filePath.endsWith('.json') && !filePath.endsWith('.jsonl')) {
       return null;
     }
 
-    if (this.shouldSkipTempArtifact(filePath)) {
+    if (this.shouldSkipTempArtifact(filePath, homeDir)) {
       return null;
     }
 
@@ -391,9 +395,9 @@ export class GeminiSessionSynchronizer implements IProviderSessionSynchronizer {
   /**
    * Keeps tmp scanning scoped to chat artifacts only.
    */
-  private shouldSkipTempArtifact(filePath: string): boolean {
+  private shouldSkipTempArtifact(filePath: string, homeDir?: string): boolean {
     return (
-      filePath.startsWith(path.join(this.geminiHome, 'tmp'))
+      filePath.startsWith(path.join(this.resolveHome(homeDir), 'tmp'))
       && !filePath.includes(`${path.sep}chats${path.sep}`)
     );
   }

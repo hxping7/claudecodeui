@@ -31,9 +31,9 @@ export class CodexProviderAuth implements IProviderAuth {
   /**
    * Returns Codex SDK availability and credential status.
    */
-  async getStatus(): Promise<ProviderAuthStatus> {
+  async getStatus(homeDir?: string): Promise<ProviderAuthStatus> {
     const installed = this.checkInstalled();
-    const credentials = await this.checkCredentials();
+    const credentials = await this.checkCredentials(homeDir);
 
     return {
       installed,
@@ -48,9 +48,9 @@ export class CodexProviderAuth implements IProviderAuth {
   /**
    * Reads Codex auth.json and checks OAuth tokens or an API key fallback.
    */
-  private async checkCredentials(): Promise<CodexCredentialsStatus> {
+  private async checkCredentials(homeDir?: string): Promise<CodexCredentialsStatus> {
     try {
-      const authPath = path.join(os.homedir(), '.codex', 'auth.json');
+      const authPath = path.join(homeDir || os.homedir(), '.codex', 'auth.json');
       const content = await readFile(authPath, 'utf8');
       const auth = readObjectRecord(JSON.parse(content)) ?? {};
       const tokens = readObjectRecord(auth.tokens) ?? {};

@@ -198,11 +198,14 @@ app.get('/api/public/models', (req, res) => {
       gemini: []
     };
 
+    // Use authenticated user's home directory for PAM mode
+    const userHome = req.user?.home_dir || os.homedir();
+
     const PROVIDER_SETTINGS_PATHS = {
-      claude: () => path.join(os.homedir(), '.claude', 'settings.json'),
-      cursor: () => path.join(os.homedir(), '.cursor', 'settings.json'),
-      codex: () => path.join(os.homedir(), '.codex', 'settings.json'),
-      gemini: () => path.join(os.homedir(), '.gemini', 'settings.json'),
+      claude: () => path.join(userHome, '.claude', 'settings.json'),
+      cursor: () => path.join(userHome, '.cursor', 'settings.json'),
+      codex: () => path.join(userHome, '.codex', 'settings.json'),
+      gemini: () => path.join(userHome, '.gemini', 'settings.json'),
     };
 
     // Read Claude settings
@@ -432,13 +435,13 @@ app.post('/api/system/update', authenticateToken, async (req, res) => {
     }
 });
 
-const expandWorkspacePath = (inputPath) => {
+const expandWorkspacePath = (inputPath, userRoot = WORKSPACES_ROOT) => {
     if (!inputPath) return inputPath;
     if (inputPath === '~') {
-        return WORKSPACES_ROOT;
+        return userRoot;
     }
     if (inputPath.startsWith('~/') || inputPath.startsWith('~\\')) {
-        return path.join(WORKSPACES_ROOT, inputPath.slice(2));
+        return path.join(userRoot, inputPath.slice(2));
     }
     return inputPath;
 };
@@ -448,17 +451,19 @@ app.get('/api/browse-filesystem', authenticateToken, async (req, res) => {
     try {
         const { path: dirPath } = req.query;
 
+        // Use authenticated user's home directory for PAM mode
+        const userRoot = req.user?.home_dir || WORKSPACES_ROOT;
         console.log('[API] Browse filesystem request for path:', dirPath);
-        console.log('[API] WORKSPACES_ROOT is:', WORKSPACES_ROOT);
+        console.log('[API] User root is:', userRoot);
         // Default to home directory if no path provided
-        const defaultRoot = WORKSPACES_ROOT;
-        let targetPath = dirPath ? expandWorkspacePath(dirPath) : defaultRoot;
+        const defaultRoot = userRoot;
+        let targetPath = dirPath ? expandWorkspacePath(dirPath, userRoot) : defaultRoot;
 
         // Resolve and normalize the path
         targetPath = path.resolve(targetPath);
 
         // Security check - ensure path is within allowed workspace root
-        const validation = await validateWorkspacePath(targetPath);
+        const validation = await validateWorkspacePath(targetPath, userRoot);
         if (!validation.valid) {
             return res.status(403).json({ error: validation.error });
         }
@@ -530,9 +535,10 @@ app.post('/api/create-folder', authenticateToken, async (req, res) => {
         if (!folderPath) {
             return res.status(400).json({ error: 'Path is required' });
         }
-        const expandedPath = expandWorkspacePath(folderPath);
+        const userRoot = req.user?.home_dir || WORKSPACES_ROOT;
+        const expandedPath = expandWorkspacePath(folderPath, userRoot);
         const resolvedInput = path.resolve(expandedPath);
-        const validation = await validateWorkspacePath(resolvedInput);
+        const validation = await validateWorkspacePath(resolvedInput, userRoot);
         if (!validation.valid) {
             return res.status(403).json({ error: validation.error });
         }
@@ -1273,7 +1279,7 @@ app.get('/api/projects/:projectId/sessions/:sessionId/token-usage', authenticate
     try {
         const { projectId, sessionId } = req.params;
         const { provider = 'claude' } = req.query;
-        const homeDir = os.homedir();
+        const homeDir = req.user?.home_dir || os.homedir();
 
         // Allow only safe characters in sessionId
         const safeSessionId = String(sessionId).replace(/[^a-zA-Z0-9._-]/g, '');

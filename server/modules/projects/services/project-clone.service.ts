@@ -13,6 +13,7 @@ type CloneProjectInput = {
   githubTokenId?: number | null;
   newGithubToken?: string | null;
   userId: number | string;
+  workspaceRoot?: string;
 };
 
 type CloneCompletePayload = {
@@ -174,13 +175,22 @@ export async function startCloneProject(
     });
   }
 
-  const pathValidation = await dependencies.validatePath(normalizedWorkspacePath);
+  const pathValidation = await (input.workspaceRoot
+    ? validateWorkspacePath(normalizedWorkspacePath, input.workspaceRoot)
+    : dependencies.validatePath(normalizedWorkspacePath));
   if (!pathValidation.valid || !pathValidation.resolvedPath) {
     throw new AppError(pathValidation.error || 'Invalid workspace path', {
       code: 'INVALID_PROJECT_PATH',
       statusCode: 400,
     });
   }
+
+  // Override registerProject to forward workspaceRoot so createProject
+  // validates against the correct user home directory
+  const registerProjectWithRoot = input.workspaceRoot
+    ? (projectPath: string, customName: string) =>
+        createProject({ projectPath, customName, workspaceRoot: input.workspaceRoot }) as Promise<{ project: Record<string, unknown> }>
+    : dependencies.registerProject;
 
   const absolutePath = pathValidation.resolvedPath;
   await dependencies.ensureDirectory(absolutePath);
@@ -258,7 +268,7 @@ export async function startCloneProject(
     gitProcess.on('close', async (code) => {
       if (code === 0) {
         try {
-          const createdProject = await dependencies.registerProject(clonePath, repoName);
+          const createdProject = await registerProjectWithRoot(clonePath, repoName);
           handlers.onComplete({
             project: createdProject.project,
             message: 'Repository cloned successfully',

@@ -163,6 +163,14 @@ export const userDb = {
       .all() as UserRow[];
   },
 
+  /** Returns all active users (for multi-user session scanning). */
+  getAllActiveUsers(): UserPublicRow[] {
+    const db = getConnection();
+    return db
+      .prepare('SELECT id, username, created_at, last_login, role, home_dir FROM users WHERE is_active = 1')
+      .all() as UserPublicRow[];
+  },
+
   /** Returns user by ID (including inactive, without password hash for admin). */
   getUserByIdFull(userId: number): UserPublicRow | undefined {
     const db = getConnection();

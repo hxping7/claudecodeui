@@ -23,15 +23,19 @@ type ParsedSession = {
  */
 export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
   private readonly provider = 'claude' as const;
-  private readonly claudeHome = path.join(os.homedir(), '.claude');
+
+  private resolveHome(homeDir?: string): string {
+    return path.join(homeDir || os.homedir(), '.claude');
+  }
 
   /**
    * Scans ~/.claude/projects and upserts discovered sessions into DB.
    */
-  async synchronize(since?: Date): Promise<number> {
-    const nameMap = await buildLookupMap(path.join(this.claudeHome, 'history.jsonl'), 'sessionId', 'display');
+  async synchronize(since?: Date, homeDir?: string): Promise<number> {
+    const claudeHome = this.resolveHome(homeDir);
+    const nameMap = await buildLookupMap(path.join(claudeHome, 'history.jsonl'), 'sessionId', 'display');
     const files = await findFilesRecursivelyCreatedAfter(
-      path.join(this.claudeHome, 'projects'),
+      path.join(claudeHome, 'projects'),
       '.jsonl',
       since ?? null
     );
@@ -62,12 +66,13 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
   /**
    * Parses and upserts one Claude session JSONL file.
    */
-  async synchronizeFile(filePath: string): Promise<string | null> {
+  async synchronizeFile(filePath: string, homeDir?: string): Promise<string | null> {
     if (!filePath.endsWith('.jsonl')) {
       return null;
     }
 
-    const nameMap = await buildLookupMap(path.join(this.claudeHome, 'history.jsonl'), 'sessionId', 'display');
+    const claudeHome = this.resolveHome(homeDir);
+    const nameMap = await buildLookupMap(path.join(claudeHome, 'history.jsonl'), 'sessionId', 'display');
     const parsed = await this.processSessionFile(filePath, nameMap);
     if (!parsed) {
       return null;

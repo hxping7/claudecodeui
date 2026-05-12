@@ -23,15 +23,19 @@ type ParsedSession = {
  */
 export class CodexSessionSynchronizer implements IProviderSessionSynchronizer {
   private readonly provider = 'codex' as const;
-  private readonly codexHome = path.join(os.homedir(), '.codex');
+
+  private resolveHome(homeDir?: string): string {
+    return path.join(homeDir || os.homedir(), '.codex');
+  }
 
   /**
    * Scans ~/.codex/sessions and upserts discovered sessions into DB.
    */
-  async synchronize(since?: Date): Promise<number> {
-    const nameMap = await buildLookupMap(path.join(this.codexHome, 'session_index.jsonl'), 'id', 'thread_name');
+  async synchronize(since?: Date, homeDir?: string): Promise<number> {
+    const codexHome = this.resolveHome(homeDir);
+    const nameMap = await buildLookupMap(path.join(codexHome, 'session_index.jsonl'), 'id', 'thread_name');
     const files = await findFilesRecursivelyCreatedAfter(
-      path.join(this.codexHome, 'sessions'),
+      path.join(codexHome, 'sessions'),
       '.jsonl',
       since ?? null
     );
@@ -70,12 +74,13 @@ export class CodexSessionSynchronizer implements IProviderSessionSynchronizer {
   /**
    * Parses and upserts one Codex session JSONL file.
    */
-  async synchronizeFile(filePath: string): Promise<string | null> {
+  async synchronizeFile(filePath: string, homeDir?: string): Promise<string | null> {
     if (!filePath.endsWith('.jsonl')) {
       return null;
     }
 
-    const nameMap = await buildLookupMap(path.join(this.codexHome, 'session_index.jsonl'), 'id', 'thread_name');
+    const codexHome = this.resolveHome(homeDir);
+    const nameMap = await buildLookupMap(path.join(codexHome, 'session_index.jsonl'), 'id', 'thread_name');
     const parsed = await this.processSessionFile(filePath, nameMap);
     if (!parsed) {
       return null;

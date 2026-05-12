@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
-import os from 'node:os';
 import path from 'node:path';
 
+import { getCurrentUserHomeDir } from '@/claude-sdk.js';
 import type { IProviderSessions } from '@/shared/interfaces.js';
 import type { AnyRecord, FetchHistoryOptions, FetchHistoryResult, NormalizedMessage } from '@/shared/types.js';
 import { createNormalizedMessage, generateMessageId, readObjectRecord } from '@/shared/utils.js';
@@ -54,7 +54,7 @@ export class CursorSessionsProvider implements IProviderSessions {
 
     const cwdId = crypto.createHash('md5').update(projectPath || process.cwd()).digest('hex');
     const safeSessionId = sanitizeCursorSessionId(sessionId);
-    const baseChatsPath = path.join(os.homedir(), '.cursor', 'chats', cwdId);
+    const baseChatsPath = path.join(getCurrentUserHomeDir(), '.cursor', 'chats', cwdId);
     const storeDbPath = path.join(baseChatsPath, safeSessionId, 'store.db');
     const resolvedBaseChatsPath = path.resolve(baseChatsPath);
     const resolvedStoreDbPath = path.resolve(storeDbPath);

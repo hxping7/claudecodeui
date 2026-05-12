@@ -422,7 +422,7 @@ router.post('/list', async (req, res) => {
     }
 
     // Scan user-level commands (~/.claude/commands/)
-    const homeDir = os.homedir();
+    const homeDir = req.user?.home_dir || os.homedir();
     const userCommandsDir = path.join(homeDir, '.claude', 'commands');
     const userCommands = await scanCommandsDirectory(
       userCommandsDir,
@@ -497,7 +497,7 @@ router.post('/execute', async (req, res) => {
     // Security: validate commandPath is within allowed directories
     {
       const resolvedPath = path.resolve(commandPath);
-      const userBase = path.resolve(path.join(os.homedir(), '.claude', 'commands'));
+      const userBase = path.resolve(path.join(req.user?.home_dir || os.homedir(), '.claude', 'commands'));
       const projectBase = context?.projectPath
         ? path.resolve(path.join(context.projectPath, '.claude', 'commands'))
         : null;

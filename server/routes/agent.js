@@ -433,7 +433,7 @@ async function cleanupProject(projectPath, sessionId = null) {
     // Also clean up the Claude session directory if sessionId provided
     if (sessionId) {
       try {
-        const sessionPath = path.join(os.homedir(), '.claude', 'sessions', sessionId);
+        const sessionPath = path.join(req.user?.home_dir || os.homedir(), '.claude', 'sessions', sessionId);
         console.log('🧹 Cleaning up session directory:', sessionPath);
         await fs.rm(sessionPath, { recursive: true, force: true });
         console.log('✅ Session directory cleaned up');
@@ -884,7 +884,7 @@ router.post('/', validateExternalApiKey, async (req, res) => {
       } else {
         // Generate a unique path for cloning
         const repoHash = crypto.createHash('md5').update(githubUrl + Date.now()).digest('hex');
-        targetPath = path.join(os.homedir(), '.claude', 'external-projects', repoHash);
+        targetPath = path.join(req.user?.home_dir || os.homedir(), '.claude', 'external-projects', repoHash);
       }
 
       finalProjectPath = await cloneGitHubRepo(githubUrl.trim(), tokenToUse, targetPath);
@@ -903,7 +903,7 @@ router.post('/', validateExternalApiKey, async (req, res) => {
     finalProjectPath = normalizeProjectPath(finalProjectPath);
 
     // Register project path in DB (or reuse existing active registration)
-    const registrationResult = projectsDb.createProjectPath(finalProjectPath, null);
+    const registrationResult = projectsDb.createProjectPath(finalProjectPath, null, req.user?.id);
     if (registrationResult.outcome === 'active_conflict') {
       console.log('Project registration already exists for:', finalProjectPath);
     } else {

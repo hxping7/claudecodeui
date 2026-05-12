@@ -18,9 +18,9 @@ export class CursorMcpProvider extends McpProvider {
     super('cursor', ['user', 'project'], ['stdio', 'http']);
   }
 
-  protected async readScopedServers(scope: McpScope, workspacePath: string): Promise<Record<string, unknown>> {
+  protected async readScopedServers(scope: McpScope, workspacePath: string, homeDir: string): Promise<Record<string, unknown>> {
     const filePath = scope === 'user'
-      ? path.join(os.homedir(), '.cursor', 'mcp.json')
+      ? path.join(homeDir, '.cursor', 'mcp.json')
       : path.join(workspacePath, '.cursor', 'mcp.json');
     const config = await readJsonConfig(filePath);
     return readObjectRecord(config.mcpServers) ?? {};
@@ -30,9 +30,10 @@ export class CursorMcpProvider extends McpProvider {
     scope: McpScope,
     workspacePath: string,
     servers: Record<string, unknown>,
+    homeDir: string,
   ): Promise<void> {
     const filePath = scope === 'user'
-      ? path.join(os.homedir(), '.cursor', 'mcp.json')
+      ? path.join(homeDir, '.cursor', 'mcp.json')
       : path.join(workspacePath, '.cursor', 'mcp.json');
     const config = await readJsonConfig(filePath);
     config.mcpServers = servers;

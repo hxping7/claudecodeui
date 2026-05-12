@@ -109,13 +109,14 @@ router.post(
       });
     }
 
-    const authenticatedUser = (req as typeof req & { user?: AuthenticatedUser }).user;
+    const authenticatedUser = (req as typeof req & { user?: AuthenticatedUser & { home_dir?: string } }).user;
     const userId = typeof authenticatedUser?.id === 'number' ? authenticatedUser.id : undefined;
 
     const projectCreationResult = await createProject({
       projectPath,
       customName,
       userId,
+      workspaceRoot: authenticatedUser?.home_dir,
     });
 
     res.json({
@@ -167,7 +168,7 @@ router.get('/clone-progress', async (req, res) => {
     const githubTokenId = readOptionalNumericQueryValue(queryParams.githubTokenId);
     const newGithubToken = readQueryStringValue(queryParams.newGithubToken) || null;
 
-    const authenticatedUser = (req as typeof req & { user?: AuthenticatedUser }).user;
+    const authenticatedUser = (req as typeof req & { user?: AuthenticatedUser & { home_dir?: string } }).user;
     const userId = authenticatedUser?.id;
     if (userId === undefined || userId === null) {
       throw new AppError('Authenticated user is required', {
@@ -183,6 +184,7 @@ router.get('/clone-progress', async (req, res) => {
         githubTokenId,
         newGithubToken,
         userId,
+        workspaceRoot: authenticatedUser?.home_dir,
       },
       {
         onProgress: (message) => {

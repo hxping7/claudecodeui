@@ -38,13 +38,17 @@ async function listDirectoryEntriesSafe(
  */
 export class CursorSessionSynchronizer implements IProviderSessionSynchronizer {
   private readonly provider = 'cursor' as const;
-  private readonly cursorHome = path.join(os.homedir(), '.cursor');
+
+  private resolveHome(homeDir?: string): string {
+    return path.join(homeDir || os.homedir(), '.cursor');
+  }
 
   /**
    * Scans Cursor chats and upserts discovered sessions into DB.
    */
-  async synchronize(since?: Date): Promise<number> {
-    const projectsDir = path.join(this.cursorHome, 'projects');
+  async synchronize(since?: Date, homeDir?: string): Promise<number> {
+    const cursorHome = this.resolveHome(homeDir);
+    const projectsDir = path.join(cursorHome, 'projects');
     const projectEntries = await listDirectoryEntriesSafe(projectsDir);
     const seenProjectPaths = new Set<string>();
 
@@ -62,7 +66,7 @@ export class CursorSessionSynchronizer implements IProviderSessionSynchronizer {
 
       seenProjectPaths.add(projectPath);
       const projectHash = this.md5(projectPath);
-      const chatsDir = path.join(this.cursorHome, 'chats', projectHash);
+      const chatsDir = path.join(cursorHome, 'chats', projectHash);
       const files = await findFilesRecursivelyCreatedAfter(chatsDir, '.jsonl', since ?? null);
 
       for (const filePath of files) {
@@ -91,7 +95,7 @@ export class CursorSessionSynchronizer implements IProviderSessionSynchronizer {
   /**
    * Parses and upserts one Cursor session JSONL file.
    */
-  async synchronizeFile(filePath: string): Promise<string | null> {
+  async synchronizeFile(filePath: string, _homeDir?: string): Promise<string | null> {
     if (!filePath.endsWith('.jsonl')) {
       return null;
     }

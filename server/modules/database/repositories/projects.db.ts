@@ -49,7 +49,7 @@ export const projectsDb = {
         const db = getConnection();
         const normalizedProjectPath = normalizeProjectPath(projectPath);
         const row = db.prepare(`
-            SELECT project_id, project_path, custom_project_name, isStarred, isArchived
+            SELECT project_id, project_path, custom_project_name, isStarred, isArchived, user_id
             FROM projects
             WHERE project_path = ? AND isArchived = 0
             LIMIT 1
@@ -61,7 +61,7 @@ export const projectsDb = {
     getProjectById(projectId: string): ProjectRepositoryRow | null {
         const db = getConnection();
         const row = db.prepare(`
-            SELECT project_id, project_path, custom_project_name, isStarred, isArchived
+            SELECT project_id, project_path, custom_project_name, isStarred, isArchived, user_id
             FROM projects
             WHERE project_id = ?
         `).get(projectId) as ProjectRepositoryRow | undefined;
@@ -86,7 +86,7 @@ export const projectsDb = {
     getProjectPaths(): ProjectRepositoryRow[] {
         const db = getConnection();
         return db.prepare(`
-            SELECT project_id, project_path, custom_project_name, isStarred, isArchived
+            SELECT project_id, project_path, custom_project_name, isStarred, isArchived, user_id
             FROM projects
             WHERE isArchived = 0
         `).all() as ProjectRepositoryRow[];

@@ -10,6 +10,7 @@ const projectRow = {
   custom_project_name: 'my-project',
   isStarred: 0,
   isArchived: 0,
+  user_id: null,
 };
 
 test('createProject throws when project path is missing', async () => {
@@ -76,7 +77,7 @@ test('createProject falls back to directory name when custom name is not provide
     {
       validatePath: async () => ({ valid: true, resolvedPath: '/workspace/my-project' }),
       ensureWorkspaceDirectory: async () => undefined,
-      persistProjectPath: (_projectPath, customName) => {
+      persistProjectPath: (_projectPath: string, customName: string | null, _userId?: number) => {
         capturedCustomName = customName;
         return {
           outcome: 'created',

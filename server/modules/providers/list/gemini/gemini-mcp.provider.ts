@@ -18,9 +18,9 @@ export class GeminiMcpProvider extends McpProvider {
     super('gemini', ['user', 'project'], ['stdio', 'http', 'sse']);
   }
 
-  protected async readScopedServers(scope: McpScope, workspacePath: string): Promise<Record<string, unknown>> {
+  protected async readScopedServers(scope: McpScope, workspacePath: string, homeDir: string): Promise<Record<string, unknown>> {
     const filePath = scope === 'user'
-      ? path.join(os.homedir(), '.gemini', 'settings.json')
+      ? path.join(homeDir, '.gemini', 'settings.json')
       : path.join(workspacePath, '.gemini', 'settings.json');
     const config = await readJsonConfig(filePath);
     return readObjectRecord(config.mcpServers) ?? {};
@@ -30,9 +30,10 @@ export class GeminiMcpProvider extends McpProvider {
     scope: McpScope,
     workspacePath: string,
     servers: Record<string, unknown>,
+    homeDir: string,
   ): Promise<void> {
     const filePath = scope === 'user'
-      ? path.join(os.homedir(), '.gemini', 'settings.json')
+      ? path.join(homeDir, '.gemini', 'settings.json')
       : path.join(workspacePath, '.gemini', 'settings.json');
     const config = await readJsonConfig(filePath);
     config.mcpServers = servers;

@@ -35,8 +35,9 @@ export interface IProvider {
 export interface IProviderAuth {
   /**
    * Checks whether the provider is installed and has usable credentials.
+   * @param homeDir - Override the home directory (for PAM multi-user support)
    */
-  getStatus(): Promise<ProviderAuthStatus>;
+  getStatus(homeDir?: string): Promise<ProviderAuthStatus>;
 }
 
 // ---------------------------
@@ -82,11 +83,15 @@ export interface IProviderSessions {
 export interface IProviderSessionSynchronizer {
   /**
    * Scans provider session artifacts and upserts discovered sessions into DB.
+   * @param since - Only process files created after this timestamp
+   * @param homeDir - Override the home directory (for PAM multi-user support)
    */
-  synchronize(since?: Date): Promise<number>;
+  synchronize(since?: Date, homeDir?: string): Promise<number>;
 
   /**
    * Parses and upserts one provider artifact file without running a full scan.
+   * @param filePath - Path to the artifact file
+   * @param homeDir - Override the home directory (for PAM multi-user support)
    */
-  synchronizeFile(filePath: string): Promise<string | null>;
+  synchronizeFile(filePath: string, homeDir?: string): Promise<string | null>;
 }

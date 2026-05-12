@@ -11,6 +11,7 @@ import GeminiResponseHandler from './gemini-response-handler.js';
 import { notifyRunFailed, notifyRunStopped } from './services/notification-orchestrator.js';
 import { providerAuthService } from './modules/providers/services/provider-auth.service.js';
 import { createNormalizedMessage } from './shared/utils.js';
+import { getCurrentUserHomeDir } from './claude-sdk.js';
 
 let activeGeminiProcesses = new Map(); // Track active processes by session ID
 
@@ -102,7 +103,7 @@ async function spawnGemini(command, options = {}, ws) {
 
     // Add MCP config flag only if MCP servers are configured
     try {
-        const geminiConfigPath = path.join(os.homedir(), '.gemini.json');
+        const geminiConfigPath = path.join(getCurrentUserHomeDir(), '.gemini.json');
         let hasMcpServers = false;
 
         try {

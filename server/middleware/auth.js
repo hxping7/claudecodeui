@@ -2,6 +2,10 @@ import jwt from 'jsonwebtoken';
 import { userDb, appConfigDb } from '../modules/database/index.js';
 import { IS_PLATFORM } from '../constants/config.js';
 import { setCurrentUserHomeDir, clearCurrentUserHomeDir } from '../claude-sdk.js';
+import { findAppRoot, getModuleDir } from '../utils/runtime-paths.js';
+
+// Superadmin is a virtual user — its workspace is the app source directory.
+const SUPERADMIN_HOME_DIR = findAppRoot(getModuleDir(import.meta.url));
 
 // Use env var if set, otherwise auto-generate a unique secret per installation
 const JWT_SECRET = process.env.JWT_SECRET || appConfigDb.getOrCreateJwtSecret();
@@ -72,8 +76,15 @@ const authenticateToken = async (req, res, next) => {
     // Add role to user object
     req.user = { ...user, role: user.role || 'user' };
 
-    // Set user home directory for PAM mode
-    const homeDir = decoded.home_dir || user.home_dir;
+    // Resolve home_dir: superadmin always uses app source directory,
+    // even if an old token still carries a PAM user's home_dir.
+    let homeDir;
+    if (user.role === 'superadmin') {
+      homeDir = SUPERADMIN_HOME_DIR;
+    } else {
+      homeDir = decoded.home_dir || user.home_dir || null;
+    }
+    req.user.home_dir = homeDir;
     if (homeDir) {
       setCurrentUserHomeDir(homeDir);
     }
@@ -130,12 +141,18 @@ const authenticateWebSocket = (token) => {
       return null;
     }
 
-    // Set user home directory for PAM mode
-    if (decoded.home_dir) {
-      setCurrentUserHomeDir(decoded.home_dir);
+    // Resolve home_dir: superadmin always uses app source directory
+    let homeDir;
+    if (user.role === 'superadmin') {
+      homeDir = SUPERADMIN_HOME_DIR;
+    } else {
+      homeDir = decoded.home_dir || user.home_dir || null;
+    }
+    if (homeDir) {
+      setCurrentUserHomeDir(homeDir);
     }
 
-    return { userId: user.id, username: user.username, role: user.role || 'user', home_dir: decoded.home_dir };
+    return { userId: user.id, username: user.username, role: user.role || 'user', home_dir: homeDir };
   } catch (error) {
     console.error('WebSocket token verification error:', error);
     return null;

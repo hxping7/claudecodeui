@@ -13,6 +13,7 @@ type CreateProjectInput = {
   projectPath: string;
   customName?: string | null;
   userId?: number;
+  workspaceRoot?: string;
 };
 
 type CreateProjectDependencies = {
@@ -104,7 +105,9 @@ export async function createProject(
     });
   }
 
-  const pathValidation = await dependencies.validatePath(normalizedPath);
+  const pathValidation = await (input.workspaceRoot
+    ? validateWorkspacePath(normalizedPath, input.workspaceRoot)
+    : dependencies.validatePath(normalizedPath));
   if (!pathValidation.valid || !pathValidation.resolvedPath) {
     throw new AppError('Invalid project path', {
       code: 'INVALID_PROJECT_PATH',

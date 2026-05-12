@@ -39,9 +39,9 @@ export class CodexMcpProvider extends McpProvider {
     super('codex', ['user', 'project'], ['stdio', 'http']);
   }
 
-  protected async readScopedServers(scope: McpScope, workspacePath: string): Promise<Record<string, unknown>> {
+  protected async readScopedServers(scope: McpScope, workspacePath: string, homeDir: string): Promise<Record<string, unknown>> {
     const filePath = scope === 'user'
-      ? path.join(os.homedir(), '.codex', 'config.toml')
+      ? path.join(homeDir, '.codex', 'config.toml')
       : path.join(workspacePath, '.codex', 'config.toml');
     const config = await readTomlConfig(filePath);
     return readObjectRecord(config.mcp_servers) ?? {};
@@ -51,9 +51,10 @@ export class CodexMcpProvider extends McpProvider {
     scope: McpScope,
     workspacePath: string,
     servers: Record<string, unknown>,
+    homeDir: string,
   ): Promise<void> {
     const filePath = scope === 'user'
-      ? path.join(os.homedir(), '.codex', 'config.toml')
+      ? path.join(homeDir, '.codex', 'config.toml')
       : path.join(workspacePath, '.codex', 'config.toml');
     const config = await readTomlConfig(filePath);
     config.mcp_servers = servers;

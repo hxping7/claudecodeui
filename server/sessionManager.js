@@ -1,13 +1,13 @@
 import { promises as fs } from 'fs';
 import path from 'path';
-import os from 'os';
+import { getCurrentUserHomeDir } from './claude-sdk.js';
 
 class SessionManager {
   constructor() {
     // Store sessions in memory with conversation history
     this.sessions = new Map();
     this.maxSessions = 100;
-    this.sessionsDir = path.join(os.homedir(), '.gemini', 'sessions');
+    this.sessionsDir = path.join(getCurrentUserHomeDir(), '.gemini', 'sessions');
     this.ready = this.init();
   }
 
