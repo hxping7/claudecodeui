@@ -4,8 +4,9 @@ import { IS_PLATFORM } from '../constants/config.js';
 import { setCurrentUserHomeDir, clearCurrentUserHomeDir } from '../claude-sdk.js';
 import { findAppRoot, getModuleDir } from '../utils/runtime-paths.js';
 
-// Superadmin is a virtual user — its workspace is the app source directory.
-const SUPERADMIN_HOME_DIR = findAppRoot(getModuleDir(import.meta.url));
+// Superadmin is a virtual user — its workspace is a dedicated directory
+// separate from all PAM users' home directories to avoid path conflicts.
+const SUPERADMIN_HOME_DIR = '/home/hxp/.cloudcli/superadmin-workspace';
 
 // Use env var if set, otherwise auto-generate a unique secret per installation
 const JWT_SECRET = process.env.JWT_SECRET || appConfigDb.getOrCreateJwtSecret();

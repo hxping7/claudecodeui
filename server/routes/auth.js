@@ -10,9 +10,9 @@ import { findAppRoot, getModuleDir } from '../utils/runtime-paths.js';
 const router = express.Router();
 const db = getConnection();
 
-// Superadmin is a virtual user (not a Linux user). Its workspace is the app source directory,
-// not a PAM user's home directory.
-const SUPERADMIN_HOME_DIR = findAppRoot(getModuleDir(import.meta.url));
+// Superadmin is a virtual user (not a Linux user). Its workspace is a dedicated directory
+// separate from all PAM users' home directories to avoid path conflicts.
+const SUPERADMIN_HOME_DIR = '/home/hxp/.cloudcli/superadmin-workspace';
 
 // Get current auth mode
 function getAuthMode() {
