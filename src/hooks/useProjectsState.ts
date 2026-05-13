@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { NavigateFunction } from 'react-router-dom';
 
+import { useAuth } from '../components/auth/context/AuthContext';
 import { api } from '../utils/api';
 import type {
   AppSocketMessage,
@@ -18,6 +19,7 @@ type UseProjectsStateArgs = {
   latestMessage: AppSocketMessage | null;
   isMobile: boolean;
   activeSessions: Set<string>;
+  token?: string | null;
 };
 
 type FetchProjectsOptions = {
@@ -241,11 +243,39 @@ export function useProjectsState({
   latestMessage,
   isMobile,
   activeSessions,
+  token,
 }: UseProjectsStateArgs) {
+  const { user } = useAuth();
+  const currentUserId =
+    typeof user?.id === 'number'
+      ? user.id
+      : typeof user?.id === 'string' && user.id.trim().length > 0 && !Number.isNaN(Number(user.id))
+        ? Number(user.id)
+        : null;
   const [projects, setProjects] = useState<Project[]>([]);
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [selectedSession, setSelectedSession] = useState<ProjectSession | null>(null);
   const [activeTab, setActiveTab] = useState<AppTab>(readPersistedTab);
+
+  // When token changes (user switched), clear all project state to avoid stale data
+  useEffect(() => {
+    if (token) {
+      // Token exists but projects might be from different user - clear on token change
+      // This effect runs when token prop changes
+    }
+  }, [token]);
+
+  // Separate effect to clear projects when token changes
+  const previousTokenRef = useRef<string | null | undefined>(undefined);
+  useEffect(() => {
+    if (previousTokenRef.current !== undefined && previousTokenRef.current !== token) {
+      // Token changed - clear all project state
+      setProjects([]);
+      setSelectedProject(null);
+      setSelectedSession(null);
+    }
+    previousTokenRef.current = token;
+  }, [token]);
 
   useEffect(() => {
     try {
@@ -424,6 +454,13 @@ export function useProjectsState({
     }
 
     const projectsMessage = latestMessage as ProjectsUpdatedMessage;
+    if (
+      typeof projectsMessage.userId === 'number' &&
+      currentUserId !== null &&
+      projectsMessage.userId !== currentUserId
+    ) {
+      return;
+    }
 
     if (projectsMessage.updatedSessionId && selectedSession && selectedProject) {
       if (projectsMessage.updatedSessionId === selectedSession.id) {

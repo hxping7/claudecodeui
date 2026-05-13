@@ -1,9 +1,10 @@
 import express from 'express';
 import { spawn } from 'child_process';
+import os from 'os';
 import path from 'path';
 import { promises as fs } from 'fs';
 import { projectsDb } from '../modules/database/index.js';
-import { queryClaudeSDK } from '../claude-sdk.js';
+import { queryClaudeSDK, getCurrentUserHomeDir } from '../claude-sdk.js';
 import { spawnCursor } from '../cursor-cli.js';
 
 const router = express.Router();
@@ -14,6 +15,11 @@ function spawnAsync(command, args, options = {}) {
     const child = spawn(command, args, {
       ...options,
       shell: false,
+      env: {
+        ...process.env,
+        HOME: getCurrentUserHomeDir() || process.env.HOME || os.homedir(),
+        ...(options.env || {}),
+      },
     });
 
     let stdout = '';

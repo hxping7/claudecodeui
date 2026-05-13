@@ -86,6 +86,12 @@ const authenticateToken = async (req, res, next) => {
       homeDir = decoded.home_dir || user.home_dir || null;
     }
     req.user.home_dir = homeDir;
+    if (typeof decoded.uid === 'number') {
+      req.user.uid = decoded.uid;
+    }
+    if (typeof decoded.gid === 'number') {
+      req.user.gid = decoded.gid;
+    }
     if (homeDir) {
       setCurrentUserHomeDir(homeDir);
     }
@@ -109,6 +115,20 @@ const generateToken = (user) => {
   if (user.home_dir) {
     payload.home_dir = user.home_dir;
   }
+
+  if (typeof user.uid === 'number') {
+    payload.uid = user.uid;
+  }
+
+  if (typeof user.gid === 'number') {
+    payload.gid = user.gid;
+  }
+
+  console.log(`[Auth] Generating JWT token for user ${user.username}:
+    userId: ${user.id}
+    uid included: ${typeof user.uid === 'number'} (value: ${user.uid})
+    gid included: ${typeof user.gid === 'number'} (value: ${user.gid})
+    home_dir: ${user.home_dir || 'not set'}`);
 
   return jwt.sign(payload, JWT_SECRET, { expiresIn: '7d' });
 };
@@ -153,7 +173,26 @@ const authenticateWebSocket = (token) => {
       setCurrentUserHomeDir(homeDir);
     }
 
-    return { userId: user.id, username: user.username, role: user.role || 'user', home_dir: homeDir };
+    const uid = typeof decoded.uid === 'number' ? decoded.uid : undefined;
+    const gid = typeof decoded.gid === 'number' ? decoded.gid : undefined;
+
+    console.log(`[AuthWebSocket] JWT decoded user info:
+      userId: ${user.id}
+      username: ${user.username}
+      decoded.uid: ${decoded.uid} (type: ${typeof decoded.uid})
+      decoded.gid: ${decoded.gid} (type: ${typeof decoded.gid})
+      resolved uid: ${uid}
+      resolved gid: ${gid}
+      homeDir: ${homeDir}`);
+
+    return {
+      userId: user.id,
+      username: user.username,
+      role: user.role || 'user',
+      home_dir: homeDir,
+      uid,
+      gid,
+    };
   } catch (error) {
     console.error('WebSocket token verification error:', error);
     return null;

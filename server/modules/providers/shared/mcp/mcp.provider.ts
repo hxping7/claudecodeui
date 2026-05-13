@@ -74,7 +74,7 @@ export abstract class McpProvider implements IProviderMcp {
       .filter((entry): entry is ProviderMcpServer => entry !== null);
   }
 
-  async upsertServer(input: UpsertProviderMcpServerInput & { homeDir?: string }): Promise<ProviderMcpServer> {
+  async upsertServer(input: UpsertProviderMcpServerInput & { homeDir?: string; uid?: number; gid?: number }): Promise<ProviderMcpServer> {
     const scope = input.scope ?? 'project';
     this.assertScopeAndTransport(scope, input.transport);
 
@@ -83,7 +83,7 @@ export abstract class McpProvider implements IProviderMcp {
     const normalizedName = normalizeServerName(input.name);
     const scopedServers = await this.readScopedServers(scope, workspacePath, homeDir);
     scopedServers[normalizedName] = this.buildServerConfig(input);
-    await this.writeScopedServers(scope, workspacePath, scopedServers, homeDir);
+    await this.writeScopedServers(scope, workspacePath, scopedServers, homeDir, input.uid, input.gid);
 
     return {
       provider: this.provider,
@@ -103,7 +103,7 @@ export abstract class McpProvider implements IProviderMcp {
   }
 
   async removeServer(
-    input: { name: string; scope?: McpScope; workspacePath?: string; homeDir?: string },
+    input: { name: string; scope?: McpScope; workspacePath?: string; homeDir?: string; uid?: number; gid?: number },
   ): Promise<{ removed: boolean; provider: LLMProvider; name: string; scope: McpScope }> {
     const scope = input.scope ?? 'project';
     this.assertScope(scope);
@@ -115,7 +115,7 @@ export abstract class McpProvider implements IProviderMcp {
     const removed = Object.prototype.hasOwnProperty.call(scopedServers, normalizedName);
     if (removed) {
       delete scopedServers[normalizedName];
-      await this.writeScopedServers(scope, workspacePath, scopedServers, homeDir);
+      await this.writeScopedServers(scope, workspacePath, scopedServers, homeDir, input.uid, input.gid);
     }
 
     return { removed, provider: this.provider, name: normalizedName, scope };
@@ -132,6 +132,8 @@ export abstract class McpProvider implements IProviderMcp {
     workspacePath: string,
     servers: Record<string, unknown>,
     homeDir: string,
+    uid?: number,
+    gid?: number,
   ): Promise<void>;
 
   protected abstract buildServerConfig(input: UpsertProviderMcpServerInput): Record<string, unknown>;

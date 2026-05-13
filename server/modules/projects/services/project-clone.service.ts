@@ -1,11 +1,13 @@
 import { spawn } from 'node:child_process';
 import { access, mkdir, rm } from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 
 import { githubTokensDb } from '@/modules/database/index.js';
 import { createProject } from '@/modules/projects/services/project-management.service.js';
 import type { WorkspacePathValidationResult } from '@/shared/types.js';
 import { AppError, validateWorkspacePath } from '@/shared/utils.js';
+import { getCurrentUserHomeDir } from '@/claude-sdk.js';
 
 type CloneProjectInput = {
   workspacePath: string;
@@ -130,6 +132,7 @@ const defaultDependencies: CloneProjectDependencies = {
       stdio: ['ignore', 'pipe', 'pipe'],
       env: {
         ...process.env,
+        HOME: getCurrentUserHomeDir() || process.env.HOME || os.homedir(),
         GIT_TERMINAL_PROMPT: '0',
       },
     }) as unknown as GitCloneProcess,

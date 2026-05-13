@@ -1,9 +1,11 @@
 import { spawn } from 'child_process';
 import crossSpawn from 'cross-spawn';
+import os from 'os';
 import { notifyRunFailed, notifyRunStopped } from './services/notification-orchestrator.js';
 import { sessionsService } from './modules/providers/services/sessions.service.js';
 import { providerAuthService } from './modules/providers/services/provider-auth.service.js';
 import { createNormalizedMessage } from './shared/utils.js';
+import { getCurrentUserHomeDir } from './claude-sdk.js';
 
 // Use cross-spawn on Windows for better command execution
 const spawnFunction = process.platform === 'win32' ? crossSpawn : spawn;
@@ -126,7 +128,7 @@ async function spawnCursor(command, options = {}, ws) {
       const cursorProcess = spawnFunction('cursor-agent', args, {
         cwd: workingDir,
         stdio: ['pipe', 'pipe', 'pipe'],
-        env: { ...process.env } // Inherit all environment variables
+        env: { ...process.env, HOME: getCurrentUserHomeDir() || process.env.HOME || os.homedir() }
       });
 
       activeCursorProcesses.set(processKey, cursorProcess);

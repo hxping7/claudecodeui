@@ -1,4 +1,5 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { spawn } from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -28,9 +29,38 @@ const readTomlConfig = async (filePath: string): Promise<Record<string, unknown>
   }
 };
 
-const writeTomlConfig = async (filePath: string, data: Record<string, unknown>): Promise<void> => {
-  await mkdir(path.dirname(filePath), { recursive: true });
+const writeTomlConfig = async (filePath: string, data: Record<string, unknown>, uid?: number, gid?: number): Promise<void> => {
   const toml = TOML.stringify(data as never);
+
+  if (typeof uid === 'number' && typeof gid === 'number') {
+    const dir = path.dirname(filePath);
+    const script = `
+      const fs = require('fs');
+      const path = require('path');
+      const dir = ${JSON.stringify(dir)};
+      const filePath = ${JSON.stringify(filePath)};
+      const content = ${JSON.stringify(toml)};
+      fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(filePath, content, 'utf8');
+    `;
+    await new Promise<void>((resolve, reject) => {
+      const child = spawn(process.execPath, ['-e', script], {
+        uid,
+        gid,
+        stdio: ['pipe', 'pipe', 'pipe'],
+      });
+      let stderr = '';
+      child.stderr.on('data', (chunk) => { stderr += chunk.toString('utf8'); });
+      child.on('error', (err) => reject(new Error(`Failed to spawn write process: ${err.message}`)));
+      child.on('close', (code) => {
+        if (code === 0) resolve();
+        else reject(new Error(`Failed to write ${filePath} as uid=${uid}: ${stderr || `exit code ${code}`}`));
+      });
+    });
+    return;
+  }
+
+  await mkdir(path.dirname(filePath), { recursive: true });
   await writeFile(filePath, toml, 'utf8');
 };
 
@@ -52,13 +82,15 @@ export class CodexMcpProvider extends McpProvider {
     workspacePath: string,
     servers: Record<string, unknown>,
     homeDir: string,
+    uid?: number,
+    gid?: number,
   ): Promise<void> {
     const filePath = scope === 'user'
       ? path.join(homeDir, '.codex', 'config.toml')
       : path.join(workspacePath, '.codex', 'config.toml');
     const config = await readTomlConfig(filePath);
     config.mcp_servers = servers;
-    await writeTomlConfig(filePath, config);
+    await writeTomlConfig(filePath, config, uid, gid);
   }
 
   protected buildServerConfig(input: UpsertProviderMcpServerInput): Record<string, unknown> {

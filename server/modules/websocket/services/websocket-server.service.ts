@@ -11,7 +11,7 @@ import type { AuthenticatedWebSocketRequest } from '@/shared/types.js';
 type WebSocketServerDependencies = {
   verifyClient: Parameters<typeof verifyWebSocketClient>[1];
   chat: Parameters<typeof handleChatConnection>[2];
-  shell: Parameters<typeof handleShellConnection>[1];
+  shell: Parameters<typeof handleShellConnection>[2];
   getPluginPort: Parameters<typeof handlePluginWsProxy>[2];
 };
 
@@ -36,7 +36,7 @@ export function createWebSocketServer(
     const pathname = new URL(url, 'http://localhost').pathname;
 
     if (pathname === '/shell') {
-      handleShellConnection(ws, dependencies.shell);
+      handleShellConnection(ws, incomingRequest, dependencies.shell);
       return;
     }
 

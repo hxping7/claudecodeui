@@ -32,6 +32,7 @@ export type AnyRecord = Record<string, any>;
 export type RealtimeClientConnection = {
   readyState: number;
   send(data: string): void;
+  userId?: string | number;
 };
 
 /**

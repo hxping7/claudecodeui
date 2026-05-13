@@ -1,9 +1,11 @@
 import { promises as fs } from 'fs';
+import os from 'os';
 import path from 'path';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 import { parse as parseShellCommand } from 'shell-quote';
 import { parseFrontmatter } from './frontmatter.js';
+import { getCurrentUserHomeDir } from '../claude-sdk.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -283,7 +285,7 @@ export async function processBashCommands(content, options = {}) {
           timeout,
           maxBuffer: 1024 * 1024, // 1MB max output
           shell: false, // IMPORTANT: No shell interpretation
-          env: { ...process.env, PATH: process.env.PATH } // Inherit PATH for finding commands
+          env: { ...process.env, PATH: process.env.PATH, HOME: getCurrentUserHomeDir() || process.env.HOME || os.homedir() }
         }
       );
 

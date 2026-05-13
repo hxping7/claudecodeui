@@ -15,6 +15,9 @@ npm install
 ```
 
 ### 2. 构建前端
+```bash
+npm ci
+```
 
 ```bash
 npm run build

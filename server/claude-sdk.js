@@ -13,6 +13,7 @@
  */
 
 import { query } from '@anthropic-ai/claude-agent-sdk';
+import { spawn } from 'child_process';
 import crypto from 'crypto';
 import fsSync from 'fs';
 import { promises as fs } from 'fs';
@@ -240,6 +241,15 @@ function mapCliOptionsToSDK(options = {}) {
   // Since SDK 0.2.113, options.env replaces process.env instead of overlaying it.
   sdkOptions.env = { ...process.env };
 
+  // Override HOME to the correct user's home directory.
+  // When running as a systemd service, process.env.HOME may point to /root
+  // or be unset, causing the SDK/CLI to look for ~/.claude/.claude.json in
+  // the wrong location and fail to detect hasCompletedOnboarding.
+  const userHome = getCurrentUserHomeDir();
+  if (userHome) {
+    sdkOptions.env.HOME = userHome;
+  }
+
   // Resolve the executable eagerly on Windows because the SDK uses raw child_process.spawn,
   // which does not reliably follow npm's shell wrappers like cross-spawn does.
   sdkOptions.pathToClaudeCodeExecutable = resolveClaudeCodeExecutablePath(process.env.CLAUDE_CLI_PATH);
@@ -307,6 +317,54 @@ function mapCliOptionsToSDK(options = {}) {
   // Map resume session
   if (sessionId) {
     sdkOptions.resume = sessionId;
+  }
+
+  // Custom spawn to run Claude CLI as the authenticated user (not root)
+  const spawnUid = options.userUid;
+  const spawnGid = options.userGid;
+  if (typeof spawnUid === 'number' && typeof spawnGid === 'number') {
+    sdkOptions.spawnClaudeCodeProcess = (spawnOptions) => {
+      const { command, args, cwd, env, signal } = spawnOptions;
+      console.log(`[ClaudeSDK] spawnClaudeCodeProcess: command=${command}, args=${args?.join(' ')}, uid=${spawnUid}, gid=${spawnGid}, cwd=${cwd}`);
+
+      const child = spawn(command, args, {
+        cwd,
+        env: { ...env },
+        uid: spawnUid,
+        gid: spawnGid,
+        stdio: ['pipe', 'pipe', 'pipe'],
+      });
+
+      if (signal) {
+        signal.addEventListener('abort', () => {
+          console.log(`[ClaudeSDK] Abort signal received, killing Claude CLI (pid=${child.pid})`);
+          child.kill('SIGTERM');
+        }, { once: true });
+      }
+
+      return {
+        stdin: child.stdin,
+        stdout: child.stdout,
+        stderr: child.stderr,
+        on(event, listener) {
+          if (event === 'exit') {
+            child.on('exit', listener);
+          } else if (event === 'error') {
+            child.on('error', listener);
+          }
+        },
+        off(event, listener) {
+          if (event === 'exit') {
+            child.off('exit', listener);
+          } else if (event === 'error') {
+            child.off('error', listener);
+          }
+        },
+        kill(signal) {
+          child.kill(signal);
+        },
+      };
+    };
   }
 
   return sdkOptions;
@@ -578,6 +636,17 @@ async function queryClaudeSDK(command, options = {}, ws) {
   };
 
   try {
+    // Extract user identity for file ownership (from WebSocket or REST API options)
+    const userUid = options.userUid ?? ws?.uid;
+    const userGid = options.userGid ?? ws?.gid;
+    if (userUid != null && userGid != null) {
+      options.userUid = userUid;
+      options.userGid = userGid;
+      console.log(`[ClaudeSDK] Spawning Claude CLI as uid=${userUid}, gid=${userGid}`);
+    } else {
+      console.log(`[ClaudeSDK] No uid/gid available, Claude CLI will run as server process user`);
+    }
+
     // Map CLI options to SDK format
     const sdkOptions = mapCliOptionsToSDK(options);
 

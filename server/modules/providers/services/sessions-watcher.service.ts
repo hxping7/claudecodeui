@@ -6,7 +6,7 @@ import chokidar, { type FSWatcher } from 'chokidar';
 
 import { sessionSynchronizerService } from '@/modules/providers/services/session-synchronizer.service.js';
 import { WS_OPEN_STATE, connectedClients } from '@/modules/websocket/index.js';
-import type { LLMProvider } from '@/shared/types.js';
+import type { LLMProvider, RealtimeClientConnection } from '@/shared/types.js';
 import { getProjectsWithSessions } from '@/modules/projects/index.js';
 import { userDb } from '@/modules/database/index.js';
 
@@ -153,30 +153,71 @@ async function flushPendingWatcherUpdate(): Promise<void> {
   watcherRefreshInFlight = true;
 
   try {
-    const updatedProjects = await getProjectsWithSessions({ skipSynchronization: true });
-    const changeTypes = Array.from(queuedUpdate.changeTypes);
-    const watchProviders = Array.from(queuedUpdate.providers);
-    const updatedSessionIds = Array.from(queuedUpdate.updatedSessionIds);
+    const clientsByUserId = new Map<number, Set<RealtimeClientConnection>>();
+    const unauthenticatedClients: RealtimeClientConnection[] = [];
 
-    // Backward-compatible fields stay populated with the first queued values.
-    const updateMessage = JSON.stringify({
-      type: 'projects_updated',
-      projects: updatedProjects,
-      timestamp: new Date().toISOString(),
-      changeType: changeTypes[0] ?? 'change',
-      updatedSessionId: updatedSessionIds[0] ?? undefined,
-      watchProvider: watchProviders[0] ?? undefined,
-      changeTypes,
-      updatedSessionIds,
-      watchProviders,
-      batched: true,
-    });
+    for (const client of connectedClients) {
+      const rawUserId = (client as any).userId;
+      const userId =
+        typeof rawUserId === 'number'
+          ? rawUserId
+          : typeof rawUserId === 'string' && rawUserId.trim().length > 0 && !Number.isNaN(Number(rawUserId))
+            ? Number(rawUserId)
+            : null;
 
-    connectedClients.forEach(client => {
-      if (client.readyState === WS_OPEN_STATE) {
-        client.send(updateMessage);
+      if (userId === null) {
+        unauthenticatedClients.push(client);
+        continue;
       }
-    });
+
+      if (!clientsByUserId.has(userId)) {
+        clientsByUserId.set(userId, new Set());
+      }
+      clientsByUserId.get(userId)!.add(client);
+    }
+
+    for (const client of unauthenticatedClients) {
+      if (client.readyState === WS_OPEN_STATE) {
+        (client as any).send(
+          JSON.stringify({
+            type: 'error',
+            error: 'Unauthorized realtime connection',
+          }),
+        );
+        if (typeof (client as any).close === 'function') {
+          (client as any).close(4401, 'Unauthorized');
+        }
+      }
+    }
+
+    for (const [userId, clients] of clientsByUserId) {
+      if (clients.size === 0) continue;
+
+      const userProjects = await getProjectsWithSessions({ skipSynchronization: true, userId });
+      const changeTypes = Array.from(queuedUpdate.changeTypes);
+      const watchProviders = Array.from(queuedUpdate.providers);
+      const updatedSessionIds = Array.from(queuedUpdate.updatedSessionIds);
+
+      const updateMessage = JSON.stringify({
+        type: 'projects_updated',
+        projects: userProjects,
+        userId,
+        timestamp: new Date().toISOString(),
+        changeType: changeTypes[0] ?? 'change',
+        updatedSessionId: updatedSessionIds[0] ?? undefined,
+        watchProvider: watchProviders[0] ?? undefined,
+        changeTypes,
+        updatedSessionIds,
+        watchProviders,
+        batched: true,
+      });
+
+      for (const client of clients) {
+        if (client.readyState === WS_OPEN_STATE) {
+          client.send(updateMessage);
+        }
+      }
+    }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     console.error('Session watcher refresh failed while broadcasting projects_updated', { error: message });

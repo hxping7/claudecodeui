@@ -470,12 +470,14 @@ export function useSessionStore() {
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const data = await response.json();
 
-      slot.serverMessages = data.messages || [];
-      slot.total = data.total ?? slot.serverMessages.length;
+      const serverMessages = data.messages || [];
+      slot.serverMessages = serverMessages;
+      slot.total = data.total ?? serverMessages.length;
       slot.hasMore = Boolean(data.hasMore);
       slot.fetchedAt = Date.now();
-      // drop realtime messages that the server has caught up with to prevent unbounded growth.
-      slot.realtimeMessages = [];
+      if (serverMessages.length > 0) {
+        slot.realtimeMessages = [];
+      }
       recomputeMergedIfNeeded(slot);
       notify(resolvedSessionId);
     } catch (error) {
@@ -566,6 +568,16 @@ export function useSessionStore() {
       notify(resolvedSessionId);
     }
   }, [notify, resolveSessionId]);
+
+  /**
+   * Clear ALL session data (used when user switches).
+   */
+  const clearAll = useCallback(() => {
+    storeRef.current.clear();
+    sessionAliasesRef.current.clear();
+    activeSessionIdRef.current = null;
+    notify(null); // Notify all
+  }, [notify]);
 
   /**
    * Get merged messages for a session (for rendering).
@@ -663,6 +675,7 @@ export function useSessionStore() {
     updateStreaming,
     finalizeStreaming,
     clearRealtime,
+    clearAll,
     getMessages,
     getSessionSlot,
     replaceSessionId,
@@ -670,7 +683,7 @@ export function useSessionStore() {
     getSlot, has, fetchFromServer, fetchMore,
     appendRealtime, appendRealtimeBatch, refreshFromServer,
     setActiveSession, setStatus, isStale, updateStreaming, finalizeStreaming,
-    clearRealtime, getMessages, getSessionSlot, replaceSessionId,
+    clearRealtime, clearAll, getMessages, getSessionSlot, replaceSessionId,
   ]);
 }
 

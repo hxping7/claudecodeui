@@ -162,7 +162,7 @@ export const sessionsDb = {
     const db = getConnection();
     const row = db
       .prepare(
-        `SELECT session_id, provider, project_id, jsonl_path, custom_name, created_at, updated_at
+        `SELECT session_id, provider, project_id, jsonl_path, custom_name, user_id, created_at, updated_at
          FROM sessions
          WHERE session_id = ?
          ORDER BY updated_at DESC

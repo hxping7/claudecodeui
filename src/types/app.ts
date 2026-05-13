@@ -63,6 +63,7 @@ export interface LoadingProgress {
 export interface ProjectsUpdatedMessage {
   type: 'projects_updated';
   projects: Project[];
+  userId?: number;
   updatedSessionId?: string;
   updatedSessionIds?: string[];
   watchProvider?: LLMProvider;

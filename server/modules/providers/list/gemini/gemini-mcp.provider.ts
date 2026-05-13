@@ -31,13 +31,15 @@ export class GeminiMcpProvider extends McpProvider {
     workspacePath: string,
     servers: Record<string, unknown>,
     homeDir: string,
+    uid?: number,
+    gid?: number,
   ): Promise<void> {
     const filePath = scope === 'user'
       ? path.join(homeDir, '.gemini', 'settings.json')
       : path.join(workspacePath, '.gemini', 'settings.json');
     const config = await readJsonConfig(filePath);
     config.mcpServers = servers;
-    await writeJsonConfig(filePath, config);
+    await writeJsonConfig(filePath, config, uid, gid);
   }
 
   protected buildServerConfig(input: UpsertProviderMcpServerInput): Record<string, unknown> {

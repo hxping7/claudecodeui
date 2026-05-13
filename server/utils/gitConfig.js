@@ -1,8 +1,16 @@
 import { spawn } from 'child_process';
+import os from 'os';
+import { getCurrentUserHomeDir } from '../claude-sdk.js';
 
 function spawnAsync(command, args) {
   return new Promise((resolve, reject) => {
-    const child = spawn(command, args, { shell: false });
+    const child = spawn(command, args, {
+      shell: false,
+      env: {
+        ...process.env,
+        HOME: getCurrentUserHomeDir() || process.env.HOME || os.homedir(),
+      },
+    });
     let stdout = '';
     child.stdout.on('data', (data) => { stdout += data.toString(); });
     child.on('error', (error) => { reject(error); });

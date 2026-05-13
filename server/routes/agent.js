@@ -5,9 +5,10 @@ import os from 'os';
 import { promises as fs } from 'fs';
 import crypto from 'crypto';
 import { userDb, apiKeysDb, githubTokensDb, projectsDb } from '../modules/database/index.js';
-import { queryClaudeSDK } from '../claude-sdk.js';
+import { queryClaudeSDK, getCurrentUserHomeDir } from '../claude-sdk.js';
 import { spawnCursor } from '../cursor-cli.js';
 import { queryCodex } from '../openai-codex.js';
+import { mkdirAsUser, getUserIdentity } from '../utils/fileOpsAsUser.js';
 import { spawnGemini } from '../gemini-cli.js';
 import { Octokit } from '@octokit/rest';
 import { CLAUDE_MODELS, CURSOR_MODELS, CODEX_MODELS } from '../../shared/modelConstants.js';
@@ -70,7 +71,8 @@ async function getGitRemoteUrl(repoPath) {
   return new Promise((resolve, reject) => {
     const gitProcess = spawn('git', ['config', '--get', 'remote.origin.url'], {
       cwd: repoPath,
-      stdio: ['pipe', 'pipe', 'pipe']
+      stdio: ['pipe', 'pipe', 'pipe'],
+      env: { ...process.env, HOME: getCurrentUserHomeDir() || process.env.HOME || os.homedir() }
     });
 
     let stdout = '';
@@ -228,7 +230,8 @@ async function getCommitMessages(projectPath, limit = 5) {
   return new Promise((resolve, reject) => {
     const gitProcess = spawn('git', ['log', `-${limit}`, '--pretty=format:%s'], {
       cwd: projectPath,
-      stdio: ['pipe', 'pipe', 'pipe']
+      stdio: ['pipe', 'pipe', 'pipe'],
+      env: { ...process.env, HOME: getCurrentUserHomeDir() || process.env.HOME || os.homedir() }
     });
 
     let stdout = '';
@@ -364,7 +367,12 @@ async function cloneGitHubRepo(githubUrl, githubToken = null, projectPath) {
       }
 
       // Ensure parent directory exists
-      await fs.mkdir(path.dirname(cloneDir), { recursive: true });
+      const userIdentity = getUserIdentity(req);
+      if (userIdentity) {
+        await mkdirAsUser(path.dirname(cloneDir), userIdentity.uid, userIdentity.gid, { recursive: true });
+      } else {
+        await fs.mkdir(path.dirname(cloneDir), { recursive: true });
+      }
 
       // Prepare the git clone URL with authentication if token is provided
       let cloneUrl = githubUrl;
@@ -379,7 +387,8 @@ async function cloneGitHubRepo(githubUrl, githubToken = null, projectPath) {
 
       // Execute git clone
       const gitProcess = spawn('git', ['clone', '--depth', '1', cloneUrl, cloneDir], {
-        stdio: ['pipe', 'pipe', 'pipe']
+        stdio: ['pipe', 'pipe', 'pipe'],
+        env: { ...process.env, HOME: getCurrentUserHomeDir() || process.env.HOME || os.homedir() }
       });
 
       let stdout = '';
@@ -947,7 +956,9 @@ router.post('/', validateExternalApiKey, async (req, res) => {
         cwd: finalProjectPath,
         sessionId: sessionId || null,
         model: model,
-        permissionMode: 'bypassPermissions' // Bypass all permissions for API calls
+        permissionMode: 'bypassPermissions', // Bypass all permissions for API calls
+        userUid: req.user?.uid,
+        userGid: req.user?.gid,
       }, writer);
 
     } else if (provider === 'cursor') {
@@ -1038,7 +1049,8 @@ router.post('/', validateExternalApiKey, async (req, res) => {
           console.log('🔄 Creating local branch...');
           const checkoutProcess = spawn('git', ['checkout', '-b', finalBranchName], {
             cwd: finalProjectPath,
-            stdio: 'pipe'
+            stdio: 'pipe',
+            env: { ...process.env, HOME: getCurrentUserHomeDir() || process.env.HOME || os.homedir() }
           });
 
           await new Promise((resolve, reject) => {
@@ -1054,7 +1066,8 @@ router.post('/', validateExternalApiKey, async (req, res) => {
                   console.log(`ℹ️ Branch '${finalBranchName}' already exists locally, checking out...`);
                   const checkoutExisting = spawn('git', ['checkout', finalBranchName], {
                     cwd: finalProjectPath,
-                    stdio: 'pipe'
+                    stdio: 'pipe',
+                    env: { ...process.env, HOME: getCurrentUserHomeDir() || process.env.HOME || os.homedir() }
                   });
                   checkoutExisting.on('close', (checkoutCode) => {
                     if (checkoutCode === 0) {
@@ -1075,7 +1088,8 @@ router.post('/', validateExternalApiKey, async (req, res) => {
           console.log('🔄 Pushing branch to remote...');
           const pushProcess = spawn('git', ['push', '-u', 'origin', finalBranchName], {
             cwd: finalProjectPath,
-            stdio: 'pipe'
+            stdio: 'pipe',
+            env: { ...process.env, HOME: getCurrentUserHomeDir() || process.env.HOME || os.homedir() }
           });
 
           await new Promise((resolve, reject) => {

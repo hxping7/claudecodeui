@@ -1,14 +1,24 @@
 import express from 'express';
+import os from 'os';
 import { userDb } from '../modules/database/index.js';
 import { authenticateToken } from '../middleware/auth.js';
 import { getSystemGitConfig } from '../utils/gitConfig.js';
 import { spawn } from 'child_process';
+import { getCurrentUserHomeDir } from '../claude-sdk.js';
 
 const router = express.Router();
 
 function spawnAsync(command, args, options = {}) {
   return new Promise((resolve, reject) => {
-    const child = spawn(command, args, { ...options, shell: false });
+    const child = spawn(command, args, {
+      ...options,
+      shell: false,
+      env: {
+        ...process.env,
+        HOME: getCurrentUserHomeDir() || process.env.HOME || os.homedir(),
+        ...(options.env || {}),
+      },
+    });
     let stdout = '';
     let stderr = '';
     child.stdout.on('data', (data) => { stdout += data.toString(); });

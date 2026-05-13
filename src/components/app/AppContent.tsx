@@ -6,10 +6,12 @@ import Sidebar from '../sidebar/view/Sidebar';
 import MainContent from '../main-content/view/MainContent';
 import CommandPalette from '../command-palette/CommandPalette';
 import { useWebSocket } from '../../contexts/WebSocketContext';
+import { useAuth } from '../auth/context/AuthContext';
 import { PaletteOpsProvider, usePaletteOpsRegister } from '../../contexts/PaletteOpsContext';
 import { useDeviceSettings } from '../../hooks/useDeviceSettings';
 import { useSessionProtection } from '../../hooks/useSessionProtection';
 import { useProjectsState } from '../../hooks/useProjectsState';
+import { useSessionStore } from '../../stores/useSessionStore';
 
 export default function AppContent() {
   return (
@@ -25,7 +27,18 @@ function AppContentInner() {
   const { t } = useTranslation('common');
   const { isMobile } = useDeviceSettings({ trackPWA: false });
   const { ws, sendMessage, latestMessage, isConnected } = useWebSocket();
+  const { token } = useAuth();
+  const sessionStore = useSessionStore();
   const wasConnectedRef = useRef(false);
+  const previousTokenRef = useRef<string | null | undefined>(undefined);
+
+  // Clear session store when user switches (token changes)
+  useEffect(() => {
+    if (previousTokenRef.current !== undefined && previousTokenRef.current !== token) {
+      sessionStore.clearAll();
+    }
+    previousTokenRef.current = token;
+  }, [token, sessionStore]);
 
   const {
     activeSessions,
@@ -59,6 +72,7 @@ function AppContentInner() {
     latestMessage,
     isMobile,
     activeSessions,
+    token,
   });
 
   usePaletteOpsRegister({

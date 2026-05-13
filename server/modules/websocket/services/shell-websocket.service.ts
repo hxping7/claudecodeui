@@ -5,7 +5,9 @@ import path from 'node:path';
 import pty, { type IPty } from 'node-pty';
 import { WebSocket, type RawData } from 'ws';
 
+import { getCurrentUserHomeDir } from '@/claude-sdk.js';
 import { parseIncomingJsonObject } from '@/shared/utils.js';
+import type { AuthenticatedWebSocketRequest } from '@/shared/types.js';
 
 type ShellIncomingMessage = {
   type?: string;
@@ -151,9 +153,26 @@ function buildShellCommand(
  */
 export function handleShellConnection(
   ws: WebSocket,
+  request: AuthenticatedWebSocketRequest,
   dependencies: ShellWebSocketDependencies
 ): void {
   console.log('[INFO] Shell websocket connected');
+
+  const shellUid = typeof request?.user?.uid === 'number' ? request.user.uid : undefined;
+  const shellGid = typeof request?.user?.gid === 'number' ? request.user.gid : undefined;
+
+  console.log(`[ShellWebSocket] User identity info:
+    username: ${request?.user?.username || 'unknown'}
+    uid: ${shellUid} (type: ${typeof request?.user?.uid}, raw value: ${request?.user?.uid})
+    gid: ${shellGid} (type: ${typeof request?.user?.gid}, raw value: ${request?.user?.gid})
+    home_dir: ${request?.user?.home_dir || 'not set'}
+    full user object keys: ${request?.user ? Object.keys(request.user).join(', ') : 'no user'}`);
+
+  if (shellUid !== undefined && shellGid !== undefined) {
+    console.log(`[INFO] Shell PTY will run as uid=${shellUid}, gid=${shellGid}`);
+  } else {
+    console.warn(`[WARN] Shell PTY missing user identity! uid=${shellUid}, gid=${shellGid}. Files will be created with server process permissions.`);
+  }
 
   let shellProcess: IPty | null = null;
   let ptySessionKey: string | null = null;
@@ -257,18 +276,40 @@ export function handleShellConnection(
         const termCols = readNumber(data.cols, 80);
         const termRows = readNumber(data.rows, 24);
 
-        shellProcess = pty.spawn(shell, shellArgs, {
+        const userHome = getCurrentUserHomeDir();
+
+        const ptyOptions: Record<string, unknown> = {
           name: 'xterm-256color',
           cols: termCols,
           rows: termRows,
           cwd: resolvedProjectPath,
           env: {
             ...process.env,
+            HOME: userHome || process.env.HOME || os.homedir(),
             TERM: 'xterm-256color',
             COLORTERM: 'truecolor',
             FORCE_COLOR: '3',
           },
-        });
+        };
+
+        if (shellUid !== undefined) {
+          ptyOptions.uid = shellUid;
+        }
+        if (shellGid !== undefined) {
+          ptyOptions.gid = shellGid;
+        }
+
+        console.log(`[ShellWebSocket] Spawning PTY process:
+          shell: ${shell}
+          args: ${JSON.stringify(shellArgs)}
+          cwd: ${resolvedProjectPath}
+          uid: ${ptyOptions.uid} (will use ${typeof ptyOptions.uid !== 'undefined' ? 'user identity' : 'process default'})
+          gid: ${ptyOptions.gid} (will use ${typeof ptyOptions.gid !== 'undefined' ? 'user identity' : 'process default'})
+          env.HOME: ${(ptyOptions.env as Record<string, string>).HOME}`);
+
+        shellProcess = pty.spawn(shell, shellArgs, ptyOptions as pty.IPtyForkOptions);
+
+        console.log(`[ShellWebSocket] PTY spawned successfully. PID: ${shellProcess.pid}`);
 
         ptySessionsMap.set(ptySessionKey, {
           pty: shellProcess,

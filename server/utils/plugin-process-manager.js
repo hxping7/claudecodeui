@@ -1,6 +1,8 @@
 import { spawn } from 'child_process';
+import os from 'os';
 import path from 'path';
 import { scanPlugins, getPluginsConfig, getPluginDir } from './plugin-loader.js';
+import { getCurrentUserHomeDir } from '../claude-sdk.js';
 
 // Map<pluginName, { process, port }>
 const runningPlugins = new Map();
@@ -31,7 +33,7 @@ export function startPluginServer(name, pluginDir, serverEntry) {
       cwd: pluginDir,
       env: {
         PATH: process.env.PATH,
-        HOME: process.env.HOME,
+        HOME: getCurrentUserHomeDir() || process.env.HOME || os.homedir(),
         NODE_ENV: process.env.NODE_ENV || 'production',
         PLUGIN_NAME: name,
       },

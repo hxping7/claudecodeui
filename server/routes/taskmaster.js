@@ -10,9 +10,12 @@
 
 import express from 'express';
 import fs from 'fs';
+import os from 'os';
 import path from 'path';
 import { promises as fsPromises } from 'fs';
+import { mkdirAsUser, writeFileAsUser, getUserIdentity } from '../utils/fileOpsAsUser.js';
 import { spawn } from 'child_process';
+import { getCurrentUserHomeDir } from '../claude-sdk.js';
 import { projectsDb } from '../modules/database/index.js';
 import { detectTaskMasterMCPServer } from '../utils/mcp-detector.js';
 import { broadcastTaskMasterProjectUpdate, broadcastTaskMasterTasksUpdate } from '../utils/taskmaster-websocket.js';
@@ -43,7 +46,8 @@ async function checkTaskMasterInstallation() {
         // Check if task-master command is available
         const child = spawn('which', ['task-master'], { 
             stdio: ['ignore', 'pipe', 'pipe'],
-            shell: true 
+            shell: true,
+            env: { ...process.env, HOME: getCurrentUserHomeDir() || process.env.HOME || os.homedir() },
         });
         
         let output = '';
@@ -62,7 +66,8 @@ async function checkTaskMasterInstallation() {
                 // TaskMaster is installed, get version
                 const versionChild = spawn('task-master', ['--version'], { 
                     stdio: ['ignore', 'pipe', 'pipe'],
-                    shell: true 
+                    shell: true,
+                    env: { ...process.env, HOME: getCurrentUserHomeDir() || process.env.HOME || os.homedir() },
                 });
                 
                 let versionOutput = '';
@@ -372,9 +377,15 @@ router.post('/prd/:projectId', async (req, res) => {
         const docsPath = path.join(projectPath, '.taskmaster', 'docs');
         const filePath = path.join(docsPath, fileName);
 
+        const userIdentity = getUserIdentity(req);
+
         // Ensure docs directory exists
         try {
-            await fsPromises.mkdir(docsPath, { recursive: true });
+            if (userIdentity) {
+                await mkdirAsUser(docsPath, userIdentity.uid, userIdentity.gid, { recursive: true });
+            } else {
+                await fsPromises.mkdir(docsPath, { recursive: true });
+            }
         } catch (error) {
             console.error('Failed to create docs directory:', error);
             return res.status(500).json({
@@ -385,7 +396,11 @@ router.post('/prd/:projectId', async (req, res) => {
 
         // Write the PRD file
         try {
-            await fsPromises.writeFile(filePath, content, 'utf8');
+            if (userIdentity) {
+                await writeFileAsUser(filePath, content, userIdentity.uid, userIdentity.gid);
+            } else {
+                await fsPromises.writeFile(filePath, content, 'utf8');
+            }
             
             // Get file stats
             const stats = await fsPromises.stat(filePath);
@@ -512,7 +527,8 @@ router.post('/init/:projectId', async (req, res) => {
         // Run taskmaster init command
         const initProcess = spawn('npx', ['task-master', 'init'], {
             cwd: projectPath,
-            stdio: ['pipe', 'pipe', 'pipe']
+            stdio: ['pipe', 'pipe', 'pipe'],
+            env: { ...process.env, HOME: getCurrentUserHomeDir() || process.env.HOME || os.homedir() },
         });
 
         let stdout = '';
@@ -614,7 +630,8 @@ router.post('/add-task/:projectId', async (req, res) => {
         // Run task-master add-task command
         const addTaskProcess = spawn('npx', args, {
             cwd: projectPath,
-            stdio: ['pipe', 'pipe', 'pipe']
+            stdio: ['pipe', 'pipe', 'pipe'],
+            env: { ...process.env, HOME: getCurrentUserHomeDir() || process.env.HOME || os.homedir() },
         });
 
         let stdout = '';
@@ -692,7 +709,8 @@ router.put('/update-task/:projectId/:taskId', async (req, res) => {
         if (status && Object.keys(req.body).length === 1) {
             const setStatusProcess = spawn('npx', ['task-master-ai', 'set-status', `--id=${taskId}`, `--status=${status}`], {
                 cwd: projectPath,
-                stdio: ['pipe', 'pipe', 'pipe']
+                stdio: ['pipe', 'pipe', 'pipe'],
+                env: { ...process.env, HOME: getCurrentUserHomeDir() || process.env.HOME || os.homedir() },
             });
 
             let stdout = '';
@@ -744,7 +762,8 @@ router.put('/update-task/:projectId/:taskId', async (req, res) => {
 
             const updateProcess = spawn('npx', ['task-master-ai', 'update-task', `--id=${taskId}`, `--prompt=${prompt}`], {
                 cwd: projectPath,
-                stdio: ['pipe', 'pipe', 'pipe']
+                stdio: ['pipe', 'pipe', 'pipe'],
+                env: { ...process.env, HOME: getCurrentUserHomeDir() || process.env.HOME || os.homedir() },
             });
 
             let stdout = '';
@@ -840,7 +859,8 @@ router.post('/parse-prd/:projectId', async (req, res) => {
         // Run task-master parse-prd command
         const parsePRDProcess = spawn('npx', args, {
             cwd: projectPath,
-            stdio: ['pipe', 'pipe', 'pipe']
+            stdio: ['pipe', 'pipe', 'pipe'],
+            env: { ...process.env, HOME: getCurrentUserHomeDir() || process.env.HOME || os.homedir() },
         });
 
         let stdout = '';
@@ -1385,8 +1405,13 @@ router.post('/apply-template/:projectId', async (req, res) => {
 
         // Ensure .taskmaster/docs directory exists
         const docsDir = path.join(projectPath, '.taskmaster', 'docs');
+        const userIdentity = getUserIdentity(req);
         try {
-            await fsPromises.mkdir(docsDir, { recursive: true });
+            if (userIdentity) {
+                await mkdirAsUser(docsDir, userIdentity.uid, userIdentity.gid, { recursive: true });
+            } else {
+                await fsPromises.mkdir(docsDir, { recursive: true });
+            }
         } catch (error) {
             console.error('Failed to create docs directory:', error);
         }
@@ -1395,7 +1420,11 @@ router.post('/apply-template/:projectId', async (req, res) => {
 
         // Write the template content to the file
         try {
-            await fsPromises.writeFile(filePath, content, 'utf8');
+            if (userIdentity) {
+                await writeFileAsUser(filePath, content, userIdentity.uid, userIdentity.gid);
+            } else {
+                await fsPromises.writeFile(filePath, content, 'utf8');
+            }
 
             res.json({
                 projectId,

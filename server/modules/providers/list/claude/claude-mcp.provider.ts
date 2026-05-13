@@ -41,12 +41,14 @@ export class ClaudeMcpProvider extends McpProvider {
     workspacePath: string,
     servers: Record<string, unknown>,
     homeDir: string,
+    uid?: number,
+    gid?: number,
   ): Promise<void> {
     if (scope === 'project') {
       const filePath = path.join(workspacePath, '.mcp.json');
       const config = await readJsonConfig(filePath);
       config.mcpServers = servers;
-      await writeJsonConfig(filePath, config);
+      await writeJsonConfig(filePath, config, uid, gid);
       return;
     }
 
@@ -54,7 +56,7 @@ export class ClaudeMcpProvider extends McpProvider {
     const config = await readJsonConfig(filePath);
     if (scope === 'user') {
       config.mcpServers = servers;
-      await writeJsonConfig(filePath, config);
+      await writeJsonConfig(filePath, config, uid, gid);
       return;
     }
 
@@ -63,7 +65,7 @@ export class ClaudeMcpProvider extends McpProvider {
     projectConfig.mcpServers = servers;
     projects[workspacePath] = projectConfig;
     config.projects = projects;
-    await writeJsonConfig(filePath, config);
+    await writeJsonConfig(filePath, config, uid, gid);
   }
 
   protected buildServerConfig(input: UpsertProviderMcpServerInput): Record<string, unknown> {

@@ -272,9 +272,15 @@ router.post(
   '/:provider/mcp/servers',
   asyncHandler(async (req: Request, res: Response) => {
     const provider = parseProvider(req.params.provider);
-    const homeDir = (req.user as { home_dir?: string } | undefined)?.home_dir;
+    const user = req.user as { home_dir?: string; uid?: number; gid?: number } | undefined;
+    const homeDir = user?.home_dir;
     const payload = parseMcpUpsertPayload(req.body);
-    const server = await providerMcpService.upsertProviderMcpServer(provider, { ...payload, homeDir });
+    const server = await providerMcpService.upsertProviderMcpServer(provider, {
+      ...payload,
+      homeDir,
+      uid: user?.uid,
+      gid: user?.gid,
+    });
     res.status(201).json(createApiSuccessResponse({ server }));
   }),
 );
@@ -285,12 +291,15 @@ router.delete(
     const provider = parseProvider(req.params.provider);
     const scope = parseMcpScope(req.query.scope);
     const workspacePath = readOptionalQueryString(req.query.workspacePath);
-    const homeDir = (req.user as { home_dir?: string } | undefined)?.home_dir;
+    const user = req.user as { home_dir?: string; uid?: number; gid?: number } | undefined;
+    const homeDir = user?.home_dir;
     const result = await providerMcpService.removeProviderMcpServer(provider, {
       name: readPathParam(req.params.name, 'name'),
       scope,
       workspacePath,
       homeDir,
+      uid: user?.uid,
+      gid: user?.gid,
     });
     res.json(createApiSuccessResponse(result));
   }),

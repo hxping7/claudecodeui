@@ -153,6 +153,36 @@ const readTextFileAsUser = async (filePath, uid, gid, username) => {
         resolve(stdout);
         return;
       }
+      if (isSafeOsUsername(username)) {
+        console.log(`[readTextFileAsUser] Direct read failed (exit ${code}), trying sudo fallback for user "${username}"`);
+        const fallback = attemptSudo();
+        let fallbackStdout = '';
+        let fallbackStderr = '';
+        fallback.stdout.on('data', (chunk) => {
+          fallbackStdout += chunk.toString('utf8');
+        });
+        fallback.stderr.on('data', (chunk) => {
+          fallbackStderr += chunk.toString('utf8');
+        });
+        fallback.on('error', (fallbackError) => {
+          console.error(`[readTextFileAsUser] Sudo fallback spawn error:`, fallbackError);
+          const err = new Error(stderr || `Failed to read file as uid=${uid} (exit ${code})`);
+          err.code = 'READ_AS_USER_FAILED';
+          reject(err);
+        });
+        fallback.on('close', (fallbackCode) => {
+          if (fallbackCode === 0) {
+            resolve(fallbackStdout);
+            return;
+          }
+          const err = new Error(
+            fallbackStderr || stderr || `Failed to read file as user "${username}" via sudo (exit ${fallbackCode})`,
+          );
+          err.code = 'READ_AS_USER_FAILED';
+          reject(err);
+        });
+        return;
+      }
       const err = new Error(stderr || `Failed to read file as uid=${uid} (exit ${code})`);
       err.code = 'READ_AS_USER_FAILED';
       reject(err);
@@ -239,6 +269,34 @@ const writeTextFileAsUser = async (filePath, content, uid, gid, username) => {
     child.on('close', (code) => {
       if (code === 0) {
         resolve();
+        return;
+      }
+      if (isSafeOsUsername(username)) {
+        console.log(`[writeTextFileAsUser] Direct write failed (exit ${code}), trying sudo fallback for user "${username}"`);
+        const fallback = attemptSudo();
+        let fallbackStderr = '';
+        fallback.stderr.on('data', (chunk) => {
+          fallbackStderr += chunk.toString('utf8');
+        });
+        fallback.on('error', (fallbackError) => {
+          console.error(`[writeTextFileAsUser] Sudo fallback spawn error:`, fallbackError);
+          const err = new Error(stderr || `Failed to write file as uid=${uid} (exit ${code})`);
+          err.code = 'WRITE_AS_USER_FAILED';
+          reject(err);
+        });
+        fallback.on('close', (fallbackCode) => {
+          if (fallbackCode === 0) {
+            resolve();
+            return;
+          }
+          const err = new Error(
+            fallbackStderr || stderr || `Failed to write file as user "${username}" via sudo (exit ${fallbackCode})`,
+          );
+          err.code = 'WRITE_AS_USER_FAILED';
+          reject(err);
+        });
+        fallback.stdin.write(content, 'utf8');
+        fallback.stdin.end();
         return;
       }
       const err = new Error(stderr || `Failed to write file as uid=${uid} (exit ${code})`);
@@ -826,7 +884,7 @@ router.get('/provider-settings/:provider', async (req, res) => {
     } catch (error) {
       if (error && (error.code === 'EACCES' || error.code === 'EPERM')) {
         if (hasUserIdentity) {
-          content = await readTextFileAsUser(settingsPath, req.user.uid, req.user.gid);
+          content = await readTextFileAsUser(settingsPath, req.user.uid, req.user.gid, req.user.username);
         } else {
           const hint = new Error(
             `Permission denied reading provider settings at "${settingsPath}". ` +
@@ -894,51 +952,28 @@ router.put('/provider-settings/:provider', async (req, res) => {
       });
     }
 
+    // Non-PAM mode: if we have user identity, always write as that user
+    // to ensure correct file ownership (never write as root)
+    if (hasUserIdentity) {
+      console.log(`[Settings] Non-PAM mode with user identity: writing as uid=${req.user.uid}, gid=${req.user.gid}, username=${req.user.username}`);
+      await writeTextFileAsUser(settingsPath, content, req.user.uid, req.user.gid, req.user.username);
+      return res.json({
+        success: true,
+        path: settingsPath,
+        message: 'Settings saved successfully'
+      });
+    }
+
+    // No user identity available: use server process identity
     // Ensure directory exists
     if (!fs.existsSync(settingsDir)) {
       console.log('[Settings] Creating directory:', settingsDir);
-      try {
-        fs.mkdirSync(settingsDir, { recursive: true });
-      } catch (error) {
-        if (error && (error.code === 'EACCES' || error.code === 'EPERM')) {
-          if (isNumericId(req.user?.uid) && isNumericId(req.user?.gid)) {
-            await writeTextFileAsUser(settingsPath, content, req.user.uid, req.user.gid);
-            return res.json({
-              success: true,
-              path: settingsPath,
-              message: 'Settings saved successfully'
-            });
-          }
-          const hint = new Error(
-            `Permission denied creating provider settings directory "${settingsDir}". ` +
-              'Your auth token is missing uid/gid; please logout/login to refresh token.',
-          );
-          hint.code = error.code;
-          throw hint;
-        }
-        throw error;
-      }
+      fs.mkdirSync(settingsDir, { recursive: true });
     }
 
     // Write file
     console.log('[Settings] Writing file:', settingsPath);
-    try {
-      fs.writeFileSync(settingsPath, content, 'utf8');
-    } catch (error) {
-      if (error && (error.code === 'EACCES' || error.code === 'EPERM')) {
-        if (isNumericId(req.user?.uid) && isNumericId(req.user?.gid)) {
-          await writeTextFileAsUser(settingsPath, content, req.user.uid, req.user.gid);
-        } else {
-          const hint = new Error(
-            `Permission denied writing provider settings at "${settingsPath}". ` +
-              'Your auth token is missing uid/gid; please logout/login to refresh token.',
-          );
-          hint.code = error.code;
-          throw hint;
-        }
-      }
-      throw error;
-    }
+    fs.writeFileSync(settingsPath, content, 'utf8');
     console.log('[Settings] File written successfully');
 
     res.json({

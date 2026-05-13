@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import {
   access,
@@ -498,11 +499,75 @@ export const readJsonConfig = async (filePath: string): Promise<Record<string, u
  * The parent directory is created automatically so callers can persist config into
  * provider-specific folders without pre-creating the directory tree. Output always
  * ends with a trailing newline to keep the file diff-friendly.
+ *
+ * When uid/gid are provided, the file is written as that user via a child process
+ * to ensure correct file ownership (critical when the server runs as root).
  */
-export const writeJsonConfig = async (filePath: string, data: Record<string, unknown>): Promise<void> => {
+export const writeJsonConfig = async (
+  filePath: string,
+  data: Record<string, unknown>,
+  uid?: number,
+  gid?: number,
+): Promise<void> => {
+  const content = `${JSON.stringify(data, null, 2)}\n`;
+
+  if (typeof uid === 'number' && typeof gid === 'number') {
+    console.log(`[writeJsonConfig] Writing as uid=${uid}, gid=${gid}: ${filePath}`);
+    await writeFileAsUser(filePath, content, uid, gid);
+    return;
+  }
+
+  console.log(`[writeJsonConfig] Writing as server process user (no uid/gid): ${filePath}`);
   await mkdir(path.dirname(filePath), { recursive: true });
-  await writeFile(filePath, `${JSON.stringify(data, null, 2)}\n`, 'utf8');
+  await writeFile(filePath, content, 'utf8');
 };
+
+/**
+ * Writes a file as a specific user by spawning a child process with the given uid/gid.
+ * Used to ensure files in user home directories have correct ownership.
+ */
+async function writeFileAsUser(
+  filePath: string,
+  content: string,
+  uid: number,
+  gid: number,
+): Promise<void> {
+  const dir = path.dirname(filePath);
+  const script = `
+    const fs = require('fs');
+    const path = require('path');
+    const dir = ${JSON.stringify(dir)};
+    const filePath = ${JSON.stringify(filePath)};
+    const content = ${JSON.stringify(content)};
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(filePath, content, 'utf8');
+  `;
+
+  return new Promise((resolve, reject) => {
+    const child = spawn(process.execPath, ['-e', script], {
+      uid,
+      gid,
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
+
+    let stderr = '';
+    child.stderr.on('data', (chunk) => {
+      stderr += chunk.toString('utf8');
+    });
+
+    child.on('error', (err) => {
+      reject(new Error(`Failed to spawn write process for ${filePath}: ${err.message}`));
+    });
+
+    child.on('close', (code) => {
+      if (code === 0) {
+        resolve();
+      } else {
+        reject(new Error(`Failed to write ${filePath} as uid=${uid}: ${stderr || `exit code ${code}`}`));
+      }
+    });
+  });
+}
 
 // ---------------------------
 //----------------- SESSION SYNCHRONIZER TITLE HELPERS ------------

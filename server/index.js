@@ -72,6 +72,7 @@ import { configureWebPush } from './services/vapid-keys.js';
 import { validateApiKey, authenticateToken, authenticateWebSocket } from './middleware/auth.js';
 import { IS_PLATFORM } from './constants/config.js';
 import { c } from './utils/colors.js';
+import { mkdirAsUser, writeFileAsUser, copyFileAsUser, existsAsUser, getUserIdentity } from './utils/fileOpsAsUser.js';
 
 // Helper to verify project ownership for user isolation
 function getProjectPathForUser(projectId, userId) {
@@ -544,22 +545,47 @@ app.post('/api/create-folder', authenticateToken, async (req, res) => {
         }
         const targetPath = validation.resolvedPath || resolvedInput;
         const parentDir = path.dirname(targetPath);
+
+        const userIdentity = getUserIdentity(req);
+
+        // Check parent exists
         try {
-            await fs.promises.access(parentDir);
+            if (userIdentity) {
+                const parentExists = await existsAsUser(parentDir, userIdentity.uid, userIdentity.gid);
+                if (!parentExists) {
+                    return res.status(404).json({ error: 'Parent directory does not exist' });
+                }
+            } else {
+                await fs.promises.access(parentDir);
+            }
         } catch (err) {
             return res.status(404).json({ error: 'Parent directory does not exist' });
         }
+
+        // Check target doesn't already exist
         try {
-            await fs.promises.access(targetPath);
-            return res.status(409).json({ error: 'Folder already exists' });
+            if (userIdentity) {
+                const targetExists = await existsAsUser(targetPath, userIdentity.uid, userIdentity.gid);
+                if (targetExists) {
+                    return res.status(409).json({ error: 'Folder already exists' });
+                }
+            } else {
+                await fs.promises.access(targetPath);
+                return res.status(409).json({ error: 'Folder already exists' });
+            }
         } catch (err) {
             // Folder doesn't exist, which is what we want
         }
+
         try {
-            await fs.promises.mkdir(targetPath, { recursive: false });
+            if (userIdentity) {
+                await mkdirAsUser(targetPath, userIdentity.uid, userIdentity.gid, { recursive: false });
+            } else {
+                await fs.promises.mkdir(targetPath, { recursive: false });
+            }
             res.json({ success: true, path: targetPath });
         } catch (mkdirError) {
-            if (mkdirError.code === 'EEXIST') {
+            if (mkdirError.code === 'EEXIST' || (mkdirError.message && mkdirError.message.includes('EEXIST'))) {
                 return res.status(409).json({ error: 'Folder already exists' });
             }
             throw mkdirError;
@@ -705,7 +731,12 @@ app.put('/api/projects/:projectId/file', authenticateToken, async (req, res) => 
         }
 
         // Write the new content
-        await fsPromises.writeFile(resolved, content, 'utf8');
+        const userIdentity = getUserIdentity(req);
+        if (userIdentity) {
+            await writeFileAsUser(resolved, content, userIdentity.uid, userIdentity.gid);
+        } else {
+            await fsPromises.writeFile(resolved, content, 'utf8');
+        }
 
         res.json({
             success: true,
@@ -835,27 +866,54 @@ app.post('/api/projects/:projectId/files/create', authenticateToken, async (req,
         }
 
         const resolvedPath = validation.resolved;
+        const userIdentity = getUserIdentity(req);
 
         // Check if already exists
         try {
-            await fsPromises.access(resolvedPath);
-            return res.status(409).json({ error: `${type === 'file' ? 'File' : 'Directory'} already exists` });
+            if (userIdentity) {
+                const alreadyExists = await existsAsUser(resolvedPath, userIdentity.uid, userIdentity.gid);
+                if (alreadyExists) {
+                    return res.status(409).json({ error: `${type === 'file' ? 'File' : 'Directory'} already exists` });
+                }
+            } else {
+                await fsPromises.access(resolvedPath);
+                return res.status(409).json({ error: `${type === 'file' ? 'File' : 'Directory'} already exists` });
+            }
         } catch {
             // Doesn't exist, which is what we want
         }
 
         // Create file or directory
         if (type === 'directory') {
-            await fsPromises.mkdir(resolvedPath, { recursive: false });
+            if (userIdentity) {
+                await mkdirAsUser(resolvedPath, userIdentity.uid, userIdentity.gid, { recursive: false });
+            } else {
+                await fsPromises.mkdir(resolvedPath, { recursive: false });
+            }
         } else {
             // Ensure parent directory exists
             const parentDir = path.dirname(resolvedPath);
             try {
-                await fsPromises.access(parentDir);
+                if (userIdentity) {
+                    const parentExists = await existsAsUser(parentDir, userIdentity.uid, userIdentity.gid);
+                    if (!parentExists) {
+                        await mkdirAsUser(parentDir, userIdentity.uid, userIdentity.gid, { recursive: true });
+                    }
+                } else {
+                    await fsPromises.access(parentDir);
+                }
             } catch {
-                await fsPromises.mkdir(parentDir, { recursive: true });
+                if (userIdentity) {
+                    await mkdirAsUser(parentDir, userIdentity.uid, userIdentity.gid, { recursive: true });
+                } else {
+                    await fsPromises.mkdir(parentDir, { recursive: true });
+                }
             }
-            await fsPromises.writeFile(resolvedPath, '', 'utf8');
+            if (userIdentity) {
+                await writeFileAsUser(resolvedPath, '', userIdentity.uid, userIdentity.gid);
+            } else {
+                await fsPromises.writeFile(resolvedPath, '', 'utf8');
+            }
         }
 
         res.json({
@@ -1116,10 +1174,22 @@ const uploadFilesHandler = async (req, res) => {
             }
 
             // Ensure target directory exists
+            const userIdentity = getUserIdentity(req);
             try {
-                await fsPromises.access(resolvedTargetDir);
+                if (userIdentity) {
+                    const targetExists = await existsAsUser(resolvedTargetDir, userIdentity.uid, userIdentity.gid);
+                    if (!targetExists) {
+                        await mkdirAsUser(resolvedTargetDir, userIdentity.uid, userIdentity.gid, { recursive: true });
+                    }
+                } else {
+                    await fsPromises.access(resolvedTargetDir);
+                }
             } catch {
-                await fsPromises.mkdir(resolvedTargetDir, { recursive: true });
+                if (userIdentity) {
+                    await mkdirAsUser(resolvedTargetDir, userIdentity.uid, userIdentity.gid, { recursive: true });
+                } else {
+                    await fsPromises.mkdir(resolvedTargetDir, { recursive: true });
+                }
             }
 
             // Move uploaded files from temp to target directory
@@ -1144,13 +1214,28 @@ const uploadFilesHandler = async (req, res) => {
                 // Ensure parent directory exists (for nested files from folder upload)
                 const parentDir = path.dirname(destPath);
                 try {
-                    await fsPromises.access(parentDir);
+                    if (userIdentity) {
+                        const parentExists = await existsAsUser(parentDir, userIdentity.uid, userIdentity.gid);
+                        if (!parentExists) {
+                            await mkdirAsUser(parentDir, userIdentity.uid, userIdentity.gid, { recursive: true });
+                        }
+                    } else {
+                        await fsPromises.access(parentDir);
+                    }
                 } catch {
-                    await fsPromises.mkdir(parentDir, { recursive: true });
+                    if (userIdentity) {
+                        await mkdirAsUser(parentDir, userIdentity.uid, userIdentity.gid, { recursive: true });
+                    } else {
+                        await fsPromises.mkdir(parentDir, { recursive: true });
+                    }
                 }
 
                 // Move file (copy + unlink to handle cross-device scenarios)
-                await fsPromises.copyFile(file.path, destPath);
+                if (userIdentity) {
+                    await copyFileAsUser(file.path, destPath, userIdentity.uid, userIdentity.gid);
+                } else {
+                    await fsPromises.copyFile(file.path, destPath);
+                }
                 await fsPromises.unlink(file.path);
 
                 uploadedFiles.push({

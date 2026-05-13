@@ -173,8 +173,8 @@ function readProjectSessionsPageById(
   };
 }
 
-// Broadcast progress to all connected WebSocket clients
-function broadcastProgress(progress: ProgressUpdate) {
+// Broadcast progress to the specific user only
+function broadcastProgress(progress: ProgressUpdate, userId?: number) {
   const message = JSON.stringify({
     type: 'loading_progress',
     ...progress,
@@ -182,7 +182,24 @@ function broadcastProgress(progress: ProgressUpdate) {
 
   connectedClients.forEach((client: RealtimeClientConnection) => {
     if (client.readyState === WS_OPEN_STATE) {
-      client.send(message);
+      if (userId === undefined) {
+        client.send(message);
+        return;
+      }
+
+      const rawClientUserId = (client as any).userId;
+      const clientUserId =
+        typeof rawClientUserId === 'number'
+          ? rawClientUserId
+          : typeof rawClientUserId === 'string' &&
+              rawClientUserId.trim().length > 0 &&
+              !Number.isNaN(Number(rawClientUserId))
+            ? Number(rawClientUserId)
+            : null;
+
+      if (clientUserId === userId) {
+        client.send(message);
+      }
     }
   });
 }
@@ -226,7 +243,7 @@ export async function getProjectsWithSessions(
       current: processedProjects,
       total: totalProjects,
       currentProject: projectPath,
-    });
+    }, options.userId);
 
     const displayName =
       row.custom_project_name && row.custom_project_name.trim().length > 0
@@ -259,7 +276,7 @@ export async function getProjectsWithSessions(
     phase: 'complete',
     current: totalProjects,
     total: totalProjects,
-  });
+  }, options.userId);
 
   return projects;
 }

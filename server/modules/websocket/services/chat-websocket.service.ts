@@ -97,9 +97,28 @@ export function handleChatConnection(
   dependencies: ChatWebSocketDependencies
 ): void {
   console.log('[INFO] Chat WebSocket connected');
-  connectedClients.add(ws);
 
-  const writer = new WebSocketWriter(ws, readRequestUserId(request));
+  // Attach userId to the WebSocket for user-specific broadcasts
+  const userId = readRequestUserId(request);
+  if (userId === null) {
+    console.log('[WARN] Chat WebSocket missing authenticated user id; closing connection');
+    ws.close(4401, 'Unauthorized');
+    return;
+  }
+  (ws as any).userId = userId;
+
+  const user = request?.user;
+  if (user) {
+    if (typeof user.uid === 'number') (ws as any).uid = user.uid;
+    if (typeof user.gid === 'number') (ws as any).gid = user.gid;
+    if (typeof user.username === 'string') (ws as any).username = user.username;
+    if (typeof user.home_dir === 'string') (ws as any).home_dir = user.home_dir;
+    console.log(`[INFO] Chat WebSocket user identity: uid=${(ws as any).uid}, gid=${(ws as any).gid}, username=${(ws as any).username}, home_dir=${(ws as any).home_dir}`);
+  }
+
+  connectedClients.add(ws as any);
+
+  const writer = new WebSocketWriter(ws, userId);
 
   ws.on('message', async (rawMessage) => {
     try {

@@ -38,8 +38,9 @@ const useWebSocketProviderState = (): WebSocketContextType => {
   const { token } = useAuth();
 
   useEffect(() => {
+    unmountedRef.current = false; // Reset on dependency change (not a real unmount)
     connect();
-    
+
     return () => {
       unmountedRef.current = true;
       if (reconnectTimeoutRef.current) {
