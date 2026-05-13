@@ -816,23 +816,19 @@ const promoteFirstAdminToSuperadmin = (db: Database): void => {
  * SQLite doesn't support ALTER TABLE ... ALTER CONSTRAINT, so we recreate the table.
  */
 const updateRoleCheckConstraint = (db: Database): void => {
-  // Check current constraint
   const tableInfo = db.pragma('table_info(users)') as { name: string; dflt_value: string | null }[];
   const roleCol = tableInfo.find(col => col.name === 'role');
   if (!roleCol) return;
 
-  // If the constraint already includes superadmin, skip
-  // We check by trying to insert a superadmin value (in a transaction, rolled back)
-  try {
-    const testRow = db.prepare("SELECT role FROM users WHERE role = 'superadmin' LIMIT 1").get();
-    // If we can query superadmin without error, constraint likely supports it
-    // But to be safe, recreate the table with updated constraint
-  } catch {
-    // Constraint doesn't support superadmin, need to recreate
+  // Check if the constraint already includes 'superadmin' by inspecting the table DDL
+  const createTableSql = (
+    db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='users'").get() as { sql: string } | undefined
+  )?.sql;
+  if (createTableSql && createTableSql.includes("'superadmin'")) {
+    return; // Constraint already supports superadmin, skip
   }
 
   // Recreate the users table with updated CHECK constraint
-  // This is safe because SQLite table recreation is standard practice for constraint changes
   db.exec(`
     CREATE TABLE IF NOT EXISTS users_new (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -849,21 +845,25 @@ const updateRoleCheckConstraint = (db: Database): void => {
     );
   `);
 
-  // Copy data only if the new table is empty (i.e., migration not yet run)
   const newCount = (db.prepare('SELECT COUNT(*) as count FROM users_new').get() as { count: number }).count;
   if (newCount === 0) {
-    db.exec(`
-      INSERT INTO users_new SELECT * FROM users;
-      DROP TABLE users;
-      ALTER TABLE users_new RENAME TO users;
-    `);
+    // Disable foreign keys to prevent ON DELETE CASCADE from deleting related data
+    db.exec('PRAGMA foreign_keys = OFF');
+    try {
+      db.exec(`
+        INSERT INTO users_new SELECT * FROM users;
+        DROP TABLE users;
+        ALTER TABLE users_new RENAME TO users;
+      `);
 
-    // Recreate indexes
-    db.exec('CREATE INDEX IF NOT EXISTS idx_users_username ON users(username)');
-    db.exec('CREATE INDEX IF NOT EXISTS idx_users_active ON users(is_active)');
-    db.exec('CREATE INDEX IF NOT EXISTS idx_users_role ON users(role)');
+      db.exec('CREATE INDEX IF NOT EXISTS idx_users_username ON users(username)');
+      db.exec('CREATE INDEX IF NOT EXISTS idx_users_active ON users(is_active)');
+      db.exec('CREATE INDEX IF NOT EXISTS idx_users_role ON users(role)');
 
-    console.log('Running migration: Updated role CHECK constraint to include superadmin');
+      console.log('Running migration: Updated role CHECK constraint to include superadmin');
+    } finally {
+      db.exec('PRAGMA foreign_keys = ON');
+    }
   } else {
     db.exec('DROP TABLE users_new');
   }

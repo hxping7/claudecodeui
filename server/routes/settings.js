@@ -3,16 +3,18 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import multer from 'multer';
+import { spawn } from 'child_process';
 import { apiKeysDb, credentialsDb, notificationPreferencesDb, pushSubscriptionsDb, appConfigDb, agentConfigDb, userAgentConfigDb } from '../modules/database/index.js';
 import { getPublicKey } from '../services/vapid-keys.js';
 import { createNotificationEvent, notifyUserIfEnabled } from '../services/notification-orchestrator.js';
 import { requireAdmin } from '../middleware/admin.js';
 import { authenticateToken } from '../middleware/auth.js';
+import { getCurrentUserHomeDir } from '../claude-sdk.js';
 
 const router = express.Router();
 
 // Helper to get current user's home directory with path validation
-const getCurrentUserHomeDir = (req) => {
+const getUserHomeDir = (req) => {
   const userHome = req.user?.home_dir || os.homedir();
   // Validate it's an absolute path (superadmin uses app source directory)
   if (!path.isAbsolute(userHome)) {
@@ -60,8 +62,193 @@ const getProviderSettingsPaths = (userHomeDir) => ({
 
 // Helper wrapper to get settings paths for current user
 const getSettingsPath = (req, provider) => {
-  const userHome = getCurrentUserHomeDir(req);
+  const userHome = getUserHomeDir(req);
   return getProviderSettingsPaths(userHome)[provider]();
+};
+
+const isNumericId = (value) => typeof value === 'number' && Number.isFinite(value);
+
+const isPamMode = () => (appConfigDb.get('auth_mode') || 'database') === 'linux';
+
+const isSafeOsUsername = (value) => typeof value === 'string' && /^[a-z_][a-z0-9_-]*[$]?$/i.test(value);
+
+const readTextFileAsUser = async (filePath, uid, gid, username) => {
+  const script = `
+    const fs = require('fs');
+    const targetPath = process.env.TARGET_PATH;
+    try {
+      const content = fs.readFileSync(targetPath, 'utf8');
+      process.stdout.write(content);
+    } catch (error) {
+      if (error && error.code === 'ENOENT') {
+        process.exit(0);
+      }
+      throw error;
+    }
+  `;
+
+  return await new Promise((resolve, reject) => {
+    const env = { ...process.env, HOME: getCurrentUserHomeDir() || process.env.HOME || os.homedir(), TARGET_PATH: filePath };
+    const attemptDirect = () =>
+      spawn(process.execPath, ['-e', script], {
+        uid,
+        gid,
+        env,
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
+
+    const attemptSudo = () =>
+      spawn('sudo', ['-n', '-u', username, process.execPath, '-e', script], {
+        env,
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
+
+    let child;
+    try {
+      child = attemptDirect();
+    } catch (error) {
+      if (error && error.code === 'EPERM' && isSafeOsUsername(username)) {
+        child = attemptSudo();
+      } else {
+        reject(error);
+        return;
+      }
+    }
+
+    let stdout = '';
+    let stderr = '';
+
+    child.stdout.on('data', (chunk) => {
+      stdout += chunk.toString('utf8');
+    });
+    child.stderr.on('data', (chunk) => {
+      stderr += chunk.toString('utf8');
+    });
+
+    child.on('error', (error) => {
+      if (error && error.code === 'EPERM' && isSafeOsUsername(username)) {
+        const fallback = attemptSudo();
+        fallback.stdout.on('data', (chunk) => {
+          stdout += chunk.toString('utf8');
+        });
+        fallback.stderr.on('data', (chunk) => {
+          stderr += chunk.toString('utf8');
+        });
+        fallback.on('error', reject);
+        fallback.on('close', (code) => {
+          if (code === 0) {
+            resolve(stdout);
+            return;
+          }
+          const err = new Error(stderr || `Failed to read file as user "${username}" via sudo (exit ${code})`);
+          err.code = 'READ_AS_USER_FAILED';
+          reject(err);
+        });
+        return;
+      }
+      reject(error);
+    });
+    child.on('close', (code) => {
+      if (code === 0) {
+        resolve(stdout);
+        return;
+      }
+      const err = new Error(stderr || `Failed to read file as uid=${uid} (exit ${code})`);
+      err.code = 'READ_AS_USER_FAILED';
+      reject(err);
+    });
+  });
+};
+
+const writeTextFileAsUser = async (filePath, content, uid, gid, username) => {
+  const script = `
+    const fs = require('fs');
+    const path = require('path');
+    const targetPath = process.env.TARGET_PATH;
+    const dir = path.dirname(targetPath);
+    try {
+      fs.mkdirSync(dir, { recursive: true });
+    } catch {}
+    const chunks = [];
+    process.stdin.on('data', (chunk) => chunks.push(chunk));
+    process.stdin.on('end', () => {
+      const payload = Buffer.concat(chunks).toString('utf8');
+      fs.writeFileSync(targetPath, payload, 'utf8');
+      process.exit(0);
+    });
+  `;
+
+  return await new Promise((resolve, reject) => {
+    const env = { ...process.env, HOME: getCurrentUserHomeDir() || process.env.HOME || os.homedir(), TARGET_PATH: filePath };
+    const attemptDirect = () =>
+      spawn(process.execPath, ['-e', script], {
+        uid,
+        gid,
+        env,
+        stdio: ['pipe', 'ignore', 'pipe'],
+      });
+
+    const attemptSudo = () =>
+      spawn('sudo', ['-n', '-u', username, process.execPath, '-e', script], {
+        env,
+        stdio: ['pipe', 'ignore', 'pipe'],
+      });
+
+    let child;
+    try {
+      child = attemptDirect();
+    } catch (error) {
+      if (error && error.code === 'EPERM' && isSafeOsUsername(username)) {
+        child = attemptSudo();
+      } else {
+        reject(error);
+        return;
+      }
+    }
+
+    let stderr = '';
+    child.stderr.on('data', (chunk) => {
+      stderr += chunk.toString('utf8');
+    });
+
+    child.on('error', (error) => {
+      if (error && error.code === 'EPERM' && isSafeOsUsername(username)) {
+        const fallback = attemptSudo();
+        let fallbackStderr = '';
+        fallback.stderr.on('data', (chunk) => {
+          fallbackStderr += chunk.toString('utf8');
+        });
+        fallback.on('error', reject);
+        fallback.on('close', (code) => {
+          if (code === 0) {
+            resolve();
+            return;
+          }
+          const err = new Error(
+            fallbackStderr || `Failed to write file as user "${username}" via sudo (exit ${code})`,
+          );
+          err.code = 'WRITE_AS_USER_FAILED';
+          reject(err);
+        });
+        fallback.stdin.write(content, 'utf8');
+        fallback.stdin.end();
+        return;
+      }
+      reject(error);
+    });
+    child.on('close', (code) => {
+      if (code === 0) {
+        resolve();
+        return;
+      }
+      const err = new Error(stderr || `Failed to write file as uid=${uid} (exit ${code})`);
+      err.code = 'WRITE_AS_USER_FAILED';
+      reject(err);
+    });
+
+    child.stdin.write(content, 'utf8');
+    child.stdin.end();
+  });
 };
 
 // Default visible providers (all providers enabled by default)
@@ -352,6 +539,14 @@ router.get('/server-env', async (req, res) => {
 // Get visible providers configuration
 router.get('/visible-providers', authenticateToken, async (req, res) => {
   try {
+    const uiConfigValue = appConfigDb.get('ui_config');
+    if (uiConfigValue) {
+      const uiConfig = JSON.parse(uiConfigValue);
+      if (Array.isArray(uiConfig?.allowedProviders) && uiConfig.allowedProviders.length > 0) {
+        return res.json({ success: true, visibleProviders: uiConfig.allowedProviders });
+      }
+    }
+
     const configValue = appConfigDb.get('visible_providers');
     const visibleProviders = configValue ? JSON.parse(configValue) : DEFAULT_VISIBLE_PROVIDERS;
     res.json({ success: true, visibleProviders });
@@ -420,7 +615,7 @@ router.put('/linux-admin-users', requireAdmin, async (req, res) => {
 });
 
 // Update visible providers configuration
-router.put('/visible-providers', async (req, res) => {
+router.put('/visible-providers', requireAdmin, async (req, res) => {
   try {
     const { visibleProviders } = req.body;
 
@@ -441,6 +636,12 @@ router.put('/visible-providers', async (req, res) => {
     }
 
     appConfigDb.set('visible_providers', JSON.stringify(visibleProviders));
+    const uiConfigValue = appConfigDb.get('ui_config');
+    if (uiConfigValue) {
+      const uiConfig = JSON.parse(uiConfigValue);
+      uiConfig.allowedProviders = visibleProviders;
+      appConfigDb.set('ui_config', JSON.stringify(uiConfig));
+    }
     res.json({ success: true, visibleProviders });
   } catch (error) {
     console.error('Error saving visible providers:', error);
@@ -592,19 +793,51 @@ router.get('/provider-settings/:provider', async (req, res) => {
     }
 
     const settingsPath = getSettingsPath(req, provider);
+    const useUserIdentity = isPamMode();
+    const hasUserIdentity = isNumericId(req.user?.uid) && isNumericId(req.user?.gid);
 
-    // Check if file exists
-    if (!fs.existsSync(settingsPath)) {
-      // Return empty object if file doesn't exist
-      return res.json({
-        success: true,
-        content: '{}',
-        path: settingsPath,
-        exists: false
-      });
+    if (useUserIdentity) {
+      if (!hasUserIdentity) {
+        return res.status(401).json({
+          error: 'Missing PAM user identity (uid/gid). Please logout/login to refresh token.',
+        });
+      }
+      try {
+        const content = await readTextFileAsUser(settingsPath, req.user.uid, req.user.gid, req.user.username);
+        if (content && content.trim().length > 0) {
+          return res.json({ success: true, content, path: settingsPath, exists: true });
+        }
+        return res.json({ success: true, content: '{}', path: settingsPath, exists: false });
+      } catch (error) {
+        console.error('Error reading provider settings as PAM user:', error);
+        throw error;
+      }
     }
 
-    const content = fs.readFileSync(settingsPath, 'utf8');
+    // Non-PAM mode: use server process identity
+    // Check if file exists
+    if (!fs.existsSync(settingsPath)) {
+      return res.json({ success: true, content: '{}', path: settingsPath, exists: false });
+    }
+
+    let content;
+    try {
+      content = fs.readFileSync(settingsPath, 'utf8');
+    } catch (error) {
+      if (error && (error.code === 'EACCES' || error.code === 'EPERM')) {
+        if (hasUserIdentity) {
+          content = await readTextFileAsUser(settingsPath, req.user.uid, req.user.gid);
+        } else {
+          const hint = new Error(
+            `Permission denied reading provider settings at "${settingsPath}". ` +
+              'Your auth token is missing uid/gid; please logout/login to refresh token.',
+          );
+          hint.code = error.code;
+          throw hint;
+        }
+      }
+      throw error;
+    }
     res.json({
       success: true,
       content,
@@ -641,14 +874,72 @@ router.put('/provider-settings/:provider', async (req, res) => {
 
     const settingsPath = getSettingsPath(req, provider);
     const settingsDir = path.dirname(settingsPath);
+    const useUserIdentity = isPamMode();
+    const hasUserIdentity = isNumericId(req.user?.uid) && isNumericId(req.user?.gid);
+
+    console.log('[Settings] Saving provider settings:', { provider, settingsPath, settingsDir });
+
+    if (useUserIdentity) {
+      if (!hasUserIdentity) {
+        return res.status(401).json({
+          error: 'Missing PAM user identity (uid/gid). Please logout/login to refresh token.',
+        });
+      }
+
+      await writeTextFileAsUser(settingsPath, content, req.user.uid, req.user.gid, req.user.username);
+      return res.json({
+        success: true,
+        path: settingsPath,
+        message: 'Settings saved successfully'
+      });
+    }
 
     // Ensure directory exists
     if (!fs.existsSync(settingsDir)) {
-      fs.mkdirSync(settingsDir, { recursive: true });
+      console.log('[Settings] Creating directory:', settingsDir);
+      try {
+        fs.mkdirSync(settingsDir, { recursive: true });
+      } catch (error) {
+        if (error && (error.code === 'EACCES' || error.code === 'EPERM')) {
+          if (isNumericId(req.user?.uid) && isNumericId(req.user?.gid)) {
+            await writeTextFileAsUser(settingsPath, content, req.user.uid, req.user.gid);
+            return res.json({
+              success: true,
+              path: settingsPath,
+              message: 'Settings saved successfully'
+            });
+          }
+          const hint = new Error(
+            `Permission denied creating provider settings directory "${settingsDir}". ` +
+              'Your auth token is missing uid/gid; please logout/login to refresh token.',
+          );
+          hint.code = error.code;
+          throw hint;
+        }
+        throw error;
+      }
     }
 
     // Write file
-    fs.writeFileSync(settingsPath, content, 'utf8');
+    console.log('[Settings] Writing file:', settingsPath);
+    try {
+      fs.writeFileSync(settingsPath, content, 'utf8');
+    } catch (error) {
+      if (error && (error.code === 'EACCES' || error.code === 'EPERM')) {
+        if (isNumericId(req.user?.uid) && isNumericId(req.user?.gid)) {
+          await writeTextFileAsUser(settingsPath, content, req.user.uid, req.user.gid);
+        } else {
+          const hint = new Error(
+            `Permission denied writing provider settings at "${settingsPath}". ` +
+              'Your auth token is missing uid/gid; please logout/login to refresh token.',
+          );
+          hint.code = error.code;
+          throw hint;
+        }
+      }
+      throw error;
+    }
+    console.log('[Settings] File written successfully');
 
     res.json({
       success: true,
@@ -656,8 +947,12 @@ router.put('/provider-settings/:provider', async (req, res) => {
       message: 'Settings saved successfully'
     });
   } catch (error) {
-    console.error('Error saving provider settings:', error);
-    res.status(500).json({ error: 'Failed to save provider settings' });
+    console.error('[Settings] Error saving provider settings:', error);
+    const privilegeHint =
+      error && (error.code === 'WRITE_AS_USER_FAILED' || error.code === 'READ_AS_USER_FAILED' || error.code === 'EPERM')
+        ? ' (server 需要具备切换 uid/gid 的权限，例如以 root 运行，或具备等效权限)'
+        : '';
+    res.status(500).json({ error: 'Failed to save provider settings: ' + error.message + privilegeHint });
   }
 });
 
@@ -678,7 +973,7 @@ router.get('/models', async (req, res) => {
     };
 
     // Read Claude settings
-    const claudeSettingsPath = getProviderSettingsPaths(getCurrentUserHomeDir(req)).claude();
+    const claudeSettingsPath = getProviderSettingsPaths(getUserHomeDir(req)).claude();
     if (fs.existsSync(claudeSettingsPath)) {
       try {
         const content = fs.readFileSync(claudeSettingsPath, 'utf8');
@@ -713,7 +1008,7 @@ router.get('/models', async (req, res) => {
     }
 
     // Read Codex/OpenAI settings
-    const codexSettingsPath = getProviderSettingsPaths(getCurrentUserHomeDir(req)).codex();
+    const codexSettingsPath = getProviderSettingsPaths(getUserHomeDir(req)).codex();
     if (fs.existsSync(codexSettingsPath)) {
       try {
         const content = fs.readFileSync(codexSettingsPath, 'utf8');
@@ -736,7 +1031,7 @@ router.get('/models', async (req, res) => {
     }
 
     // Read Gemini settings
-    const geminiSettingsPath = getProviderSettingsPaths(getCurrentUserHomeDir(req)).gemini();
+    const geminiSettingsPath = getProviderSettingsPaths(getUserHomeDir(req)).gemini();
     if (fs.existsSync(geminiSettingsPath)) {
       try {
         const content = fs.readFileSync(geminiSettingsPath, 'utf8');
@@ -758,7 +1053,7 @@ router.get('/models', async (req, res) => {
     }
 
     // Read Cursor settings
-    const cursorSettingsPath = getProviderSettingsPaths(getCurrentUserHomeDir(req)).cursor();
+    const cursorSettingsPath = getProviderSettingsPaths(getUserHomeDir(req)).cursor();
     if (fs.existsSync(cursorSettingsPath)) {
       try {
         const content = fs.readFileSync(cursorSettingsPath, 'utf8');
