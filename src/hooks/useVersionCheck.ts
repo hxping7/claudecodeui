@@ -1,18 +1,19 @@
 import { useState, useEffect } from 'react';
 import { version } from '../../package.json';
 import { ReleaseInfo } from '../types/sharedTypes';
+import { useUIConfig } from '../contexts/UIConfigContext';
 
 /**
  * Compare two semantic version strings
  * Works only with numeric versions separated by dots (e.g. "1.2.3")
- * @param {string} v1 
+ * @param {string} v1
  * @param {string} v2
  * @returns positive if v1 > v2, negative if v1 < v2, 0 if equal
  */
 const compareVersions = (v1: string, v2: string) => {
   const parts1 = v1.split('.').map(Number);
   const parts2 = v2.split('.').map(Number);
-  
+
   for (let i = 0; i < Math.max(parts1.length, parts2.length); i++) {
     const p1 = parts1[i] || 0;
     const p2 = parts2[i] || 0;
@@ -28,6 +29,7 @@ export const useVersionCheck = (owner: string, repo: string) => {
   const [latestVersion, setLatestVersion] = useState<string | null>(null);
   const [releaseInfo, setReleaseInfo] = useState<ReleaseInfo | null>(null);
   const [installMode, setInstallMode] = useState<InstallMode>('git');
+  const { config, isLoading } = useUIConfig();
 
   useEffect(() => {
     const fetchInstallMode = async () => {
@@ -45,6 +47,11 @@ export const useVersionCheck = (owner: string, repo: string) => {
   }, []);
 
   useEffect(() => {
+    // Skip version check if disabled in config or config is still loading
+    if (isLoading || config?.disableVersionCheck) {
+      return;
+    }
+
     const checkVersion = async () => {
       try {
         const response = await fetch(`https://api.github.com/repos/${owner}/${repo}/releases/latest`);
@@ -82,7 +89,7 @@ export const useVersionCheck = (owner: string, repo: string) => {
     checkVersion();
     const interval = setInterval(checkVersion, 5 * 60 * 1000); // Check every 5 minutes
     return () => clearInterval(interval);
-  }, [owner, repo]);
+  }, [owner, repo, config?.disableVersionCheck, isLoading]);
 
   return { updateAvailable, latestVersion, currentVersion: version, releaseInfo, installMode };
 }; 

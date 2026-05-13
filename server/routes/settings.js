@@ -1137,6 +1137,7 @@ const DEFAULT_UI_CONFIG = {
   showSettingsNotifications: true,
   showSettingsAbout: true,
   allowedProviders: ['claude', 'cursor', 'codex', 'gemini'],
+  disableVersionCheck: false,
 };
 
 // Get UI configuration
@@ -1170,6 +1171,7 @@ router.put('/ui-config', requireAdmin, async (req, res) => {
       showSettingsNotifications,
       showSettingsAbout,
       allowedProviders,
+      disableVersionCheck,
     } = req.body;
 
     const currentConfigValue = appConfigDb.get('ui_config');
@@ -1202,6 +1204,7 @@ router.put('/ui-config', requireAdmin, async (req, res) => {
       showSettingsNotifications: typeof showSettingsNotifications === 'boolean' ? showSettingsNotifications : currentConfig.showSettingsNotifications,
       showSettingsAbout: typeof showSettingsAbout === 'boolean' ? showSettingsAbout : currentConfig.showSettingsAbout,
       allowedProviders: validatedProviders,
+      disableVersionCheck: typeof disableVersionCheck === 'boolean' ? disableVersionCheck : currentConfig.disableVersionCheck,
     };
 
     appConfigDb.set('ui_config', JSON.stringify(newConfig));

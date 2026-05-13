@@ -20,6 +20,7 @@ interface UIConfig {
   showSettingsNotifications: boolean;
   showSettingsAbout: boolean;
   allowedProviders: string[];
+  disableVersionCheck: boolean;
 }
 
 const defaultConfig: UIConfig = {
@@ -38,6 +39,7 @@ const defaultConfig: UIConfig = {
   showSettingsNotifications: true,
   showSettingsAbout: true,
   allowedProviders: ['claude', 'cursor', 'codex', 'gemini'],
+  disableVersionCheck: false,
 };
 
 const PROVIDER_NAMES: Record<string, string> = {
@@ -279,6 +281,32 @@ export default function UISettingsPanel() {
               </button>
             </label>
           ))}
+        </div>
+      </div>
+
+      {/* Version Check Section */}
+      <div className="bg-card rounded-lg border p-6 space-y-6">
+        <h3 className="text-lg font-semibold">{t('uiSettings.versionCheck', 'Version Check')}</h3>
+        <p className="text-sm text-muted-foreground">{t('uiSettings.versionCheckDescription', 'Configure automatic update notifications')}</p>
+
+        <div className="space-y-3">
+          <label
+            className="flex items-center justify-between p-3 rounded-lg hover:bg-muted/50 cursor-pointer"
+          >
+            <span>{t('uiSettings.disableVersionCheck', 'Disable update check')}</span>
+            <button
+              onClick={() => handleToggle('disableVersionCheck')}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                config.disableVersionCheck ? 'bg-primary' : 'bg-muted'
+              }`}
+            >
+              <span
+                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                  config.disableVersionCheck ? 'translate-x-6' : 'translate-x-1'
+                }`}
+              />
+            </button>
+          </label>
         </div>
       </div>
 

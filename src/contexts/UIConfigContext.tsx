@@ -22,6 +22,8 @@ export interface UIConfig {
   showSettingsAbout: boolean;
   // Admin-controlled allowed providers (users can only see/select from these)
   allowedProviders: string[];
+  // Disable version update check
+  disableVersionCheck: boolean;
 }
 
 const defaultConfig: UIConfig = {
@@ -41,6 +43,7 @@ const defaultConfig: UIConfig = {
   showSettingsNotifications: true,
   showSettingsAbout: true,
   allowedProviders: ['claude', 'cursor', 'codex', 'gemini'],
+  disableVersionCheck: false,
 };
 
 type UIConfigContextType = {
