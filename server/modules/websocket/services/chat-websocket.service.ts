@@ -113,7 +113,9 @@ export function handleChatConnection(
     if (typeof user.gid === 'number') (ws as any).gid = user.gid;
     if (typeof user.username === 'string') (ws as any).username = user.username;
     if (typeof user.home_dir === 'string') (ws as any).home_dir = user.home_dir;
-    console.log(`[INFO] Chat WebSocket user identity: uid=${(ws as any).uid}, gid=${(ws as any).gid}, username=${(ws as any).username}, home_dir=${(ws as any).home_dir}`);
+    console.log(`[INFO] Chat WebSocket user identity: userId=${userId}, uid=${(ws as any).uid}, gid=${(ws as any).gid}, username=${(ws as any).username}, home_dir=${(ws as any).home_dir}`);
+  } else {
+    console.warn(`[WARN] Chat WebSocket: no user object in request`);
   }
 
   connectedClients.add(ws as any);

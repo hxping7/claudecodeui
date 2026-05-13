@@ -40,6 +40,8 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
       since ?? null
     );
 
+    console.log(`[ClaudeSessionSynchronizer] Synchronizing sessions from ${claudeHome}, found ${files.length} files`);
+
     let processed = 0;
     for (const filePath of files) {
       const parsed = await this.processSessionFile(filePath, nameMap);
@@ -48,7 +50,7 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
       }
 
       const timestamps = await readFileTimestamps(filePath);
-      sessionsDb.createSession(
+      const resultSessionId = sessionsDb.createSession(
         parsed.sessionId,
         this.provider,
         parsed.projectPath,
@@ -57,9 +59,16 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
         timestamps.updatedAt,
         filePath
       );
+
+      if (processed < 5 || processed % 50 === 0) {
+        const sessionInfo = sessionsDb.getSessionById(parsed.sessionId);
+        console.log(`[ClaudeSessionSynchronizer] Session ${processed}: id=${parsed.sessionId}, path=${parsed.projectPath}, user_id=${sessionInfo?.user_id ?? 'NULL'}`);
+      }
+
       processed += 1;
     }
 
+    console.log(`[ClaudeSessionSynchronizer] Sync complete: processed ${processed} sessions`);
     return processed;
   }
 
