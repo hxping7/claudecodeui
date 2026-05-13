@@ -136,22 +136,46 @@ export function handleChatConnection(
       }
 
       if (messageType === 'claude-command') {
-        await dependencies.queryClaudeSDK(data.command ?? '', data.options, writer);
+        const claudeOptions = {
+          ...(data.options || {}),
+          userUid: (ws as any).uid,
+          userGid: (ws as any).gid,
+          homeDir: (ws as any).home_dir,
+        };
+        await dependencies.queryClaudeSDK(data.command ?? '', claudeOptions, writer);
         return;
       }
 
       if (messageType === 'cursor-command') {
-        await dependencies.spawnCursor(data.command ?? '', data.options, writer);
+        const cursorOptions = {
+          ...(data.options || {}),
+          userUid: (ws as any).uid,
+          userGid: (ws as any).gid,
+          homeDir: (ws as any).home_dir,
+        };
+        await dependencies.spawnCursor(data.command ?? '', cursorOptions, writer);
         return;
       }
 
       if (messageType === 'codex-command') {
-        await dependencies.queryCodex(data.command ?? '', data.options, writer);
+        const codexOptions = {
+          ...(data.options || {}),
+          userUid: (ws as any).uid,
+          userGid: (ws as any).gid,
+          homeDir: (ws as any).home_dir,
+        };
+        await dependencies.queryCodex(data.command ?? '', codexOptions, writer);
         return;
       }
 
       if (messageType === 'gemini-command') {
-        await dependencies.spawnGemini(data.command ?? '', data.options, writer);
+        const geminiOptions = {
+          ...(data.options || {}),
+          userUid: (ws as any).uid,
+          userGid: (ws as any).gid,
+          homeDir: (ws as any).home_dir,
+        };
+        await dependencies.spawnGemini(data.command ?? '', geminiOptions, writer);
         return;
       }
 
@@ -162,6 +186,9 @@ export function handleChatConnection(
             sessionId: data.sessionId,
             resume: true,
             cwd: data.options?.cwd,
+            userUid: (ws as any).uid,
+            userGid: (ws as any).gid,
+            homeDir: (ws as any).home_dir,
           },
           writer
         );

@@ -994,12 +994,16 @@ Generate the commit message:`;
       await queryClaudeSDK(prompt, {
         cwd: projectPath,
         permissionMode: 'bypassPermissions',
-        model: 'sonnet'
+        model: 'sonnet',
+        userUid: req.user?.uid,
+        userGid: req.user?.gid,
       }, writer);
     } else if (provider === 'cursor') {
       await spawnCursor(prompt, {
         cwd: projectPath,
-        skipPermissions: true
+        skipPermissions: true,
+        userUid: req.user?.uid,
+        userGid: req.user?.gid,
       }, writer);
     }
 
