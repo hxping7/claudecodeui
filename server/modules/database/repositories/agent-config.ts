@@ -16,6 +16,8 @@ type AgentConfigRow = {
   gemini_api_key_encrypted: string | null;
   cursor_base_url: string | null;
   cursor_api_key_encrypted: string | null;
+  tokenc_base_url: string | null;
+  tokenc_api_key_encrypted: string | null;
   updated_at: string | null;
   updated_by: number | null;
 };
@@ -25,6 +27,7 @@ export type AgentConfig = {
   openaiBaseUrl: string | null;
   geminiBaseUrl: string | null;
   cursorBaseUrl: string | null;
+  tokencBaseUrl: string | null;
   updatedAt: string | null;
   updatedBy: number | null;
 };
@@ -72,6 +75,7 @@ export const agentConfigDb = {
       openaiBaseUrl: row.openai_base_url,
       geminiBaseUrl: row.gemini_base_url,
       cursorBaseUrl: row.cursor_base_url,
+      tokencBaseUrl: row.tokenc_base_url,
       updatedAt: row.updated_at,
       updatedBy: row.updated_by,
     };
@@ -107,6 +111,8 @@ export const agentConfigDb = {
     geminiApiKey?: string | null;
     cursorBaseUrl?: string | null;
     cursorApiKey?: string | null;
+    tokencBaseUrl?: string | null;
+    tokencApiKey?: string | null;
   }, userId: number): void {
     const db = getConnection();
     const updates: string[] = [];
@@ -144,6 +150,14 @@ export const agentConfigDb = {
       updates.push('cursor_api_key_encrypted = ?');
       values.push(config.cursorApiKey ? encrypt(config.cursorApiKey) : null);
     }
+    if (config.tokencBaseUrl !== undefined) {
+      updates.push('tokenc_base_url = ?');
+      values.push(config.tokencBaseUrl);
+    }
+    if (config.tokencApiKey !== undefined) {
+      updates.push('tokenc_api_key_encrypted = ?');
+      values.push(config.tokencApiKey ? encrypt(config.tokencApiKey) : null);
+    }
 
     if (updates.length === 0) return;
 
@@ -173,7 +187,7 @@ export const agentConfigDb = {
   },
 
   /** Get environment variables to inject for AI agents */
-  getEnvForAgent(provider: 'anthropic' | 'openai' | 'gemini' | 'cursor'): Record<string, string> {
+  getEnvForAgent(provider: 'anthropic' | 'openai' | 'gemini' | 'cursor' | 'tokenc'): Record<string, string> {
     const config = agentConfigDb.get();
     if (!config) return {};
 
@@ -191,6 +205,9 @@ export const agentConfigDb = {
         break;
       case 'cursor':
         if (config.cursorBaseUrl) env.CURSOR_BASE_URL = config.cursorBaseUrl;
+        break;
+      case 'tokenc':
+        if (config.tokencBaseUrl) env.TOKENC_BASE_URL = config.tokencBaseUrl;
         break;
     }
 

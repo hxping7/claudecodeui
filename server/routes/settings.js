@@ -688,7 +688,7 @@ router.put('/visible-providers', requireAdmin, async (req, res) => {
     }
 
     // Validate that all providers are valid
-    const validProviders = ['claude', 'cursor', 'codex', 'gemini'];
+    const validProviders = ['claude', 'cursor', 'codex', 'gemini', 'tokenc'];
     const invalidProviders = visibleProviders.filter(p => !validProviders.includes(p));
     if (invalidProviders.length > 0) {
       return res.status(400).json({ error: `Invalid providers: ${invalidProviders.join(', ')}` });
@@ -740,6 +740,8 @@ router.put('/agent-config', requireAdmin, async (req, res) => {
       geminiApiKey,
       cursorBaseUrl,
       cursorApiKey,
+      tokencBaseUrl,
+      tokencApiKey,
     } = req.body;
 
     agentConfigDb.update({
@@ -751,6 +753,8 @@ router.put('/agent-config', requireAdmin, async (req, res) => {
       geminiApiKey: geminiApiKey ?? null,
       cursorBaseUrl: cursorBaseUrl ?? null,
       cursorApiKey: cursorApiKey ?? null,
+      tokencBaseUrl: tokencBaseUrl ?? null,
+      tokencApiKey: tokencApiKey ?? null,
     }, req.user.id);
 
     const config = agentConfigDb.get();
@@ -850,7 +854,7 @@ router.get('/user-agent-config/:provider', async (req, res) => {
 router.get('/provider-settings/:provider', async (req, res) => {
   try {
     const { provider } = req.params;
-    const validProviders = ['claude', 'cursor', 'codex', 'gemini'];
+    const validProviders = ['claude', 'cursor', 'codex', 'gemini', 'tokenc'];
 
     if (!validProviders.includes(provider)) {
       return res.status(400).json({ error: `Invalid provider. Must be one of: ${validProviders.join(', ')}` });
@@ -919,7 +923,7 @@ router.put('/provider-settings/:provider', async (req, res) => {
   try {
     const { provider } = req.params;
     const { content } = req.body;
-    const validProviders = ['claude', 'cursor', 'codex', 'gemini'];
+    const validProviders = ['claude', 'cursor', 'codex', 'gemini', 'tokenc'];
 
     if (!validProviders.includes(provider)) {
       return res.status(400).json({ error: `Invalid provider. Must be one of: ${validProviders.join(', ')}` });
@@ -1146,7 +1150,7 @@ const DEFAULT_UI_CONFIG = {
   showSettingsPlugins: true,
   showSettingsNotifications: true,
   showSettingsAbout: true,
-  allowedProviders: ['claude', 'cursor', 'codex', 'gemini'],
+  allowedProviders: ['claude', 'cursor', 'codex', 'gemini', 'tokenc'],
   disableVersionCheck: false,
 };
 
@@ -1190,7 +1194,7 @@ router.put('/ui-config', requireAdmin, async (req, res) => {
     // Validate allowedProviders if provided
     let validatedProviders = currentConfig.allowedProviders;
     if (Array.isArray(allowedProviders)) {
-      const validProviders = ['claude', 'cursor', 'codex', 'gemini'];
+      const validProviders = ['claude', 'cursor', 'codex', 'gemini', 'tokenc'];
       validatedProviders = allowedProviders.filter(p => validProviders.includes(p));
       // Ensure at least one provider is allowed
       if (validatedProviders.length === 0) {

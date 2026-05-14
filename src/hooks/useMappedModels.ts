@@ -19,6 +19,7 @@ type MappedModelsConfig = {
   cursor: ProviderModels;
   codex: ProviderModels;
   gemini: ProviderModels;
+  tokenc: ProviderModels;
 };
 
 const DEFAULT_MODELS: MappedModelsConfig = {
@@ -26,6 +27,7 @@ const DEFAULT_MODELS: MappedModelsConfig = {
   cursor: { models: [] },
   codex: { models: [] },
   gemini: { models: [] },
+  tokenc: { models: [] },
 };
 
 /**
@@ -49,6 +51,7 @@ export function useMappedModels() {
           cursor: { models: data.models.cursor || [] },
           codex: { models: data.models.codex || [] },
           gemini: { models: data.models.gemini || [] },
+          tokenc: { models: data.models.tokenc || [] },
         });
       }
     } catch (error) {

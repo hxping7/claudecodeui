@@ -1,0 +1,109 @@
+<svg width="560" height="320" viewBox="0 0 560 320" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="560" height="320" fill="#050a14"/>
+  <defs>
+    <linearGradient id="ringGrad3" x1="0" y1="0" x2="560" y2="0" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#00d4ff" stop-opacity="0"/>
+      <stop offset="25%" stop-color="#00d4ff"/>
+      <stop offset="75%" stop-color="#7c3aed"/>
+      <stop offset="100%" stop-color="#7c3aed" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="textGrad3" x1="80" y1="0" x2="480" y2="0" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#60c0ff"/>
+      <stop offset="45%" stop-color="#ffffff"/>
+      <stop offset="100%" stop-color="#b088ff"/>
+    </linearGradient>
+    <linearGradient id="infGrad3" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#00d4ff"/>
+      <stop offset="50%" stop-color="#7c3aed"/>
+      <stop offset="100%" stop-color="#00d4ff"/>
+    </linearGradient>
+    <filter id="glow3t">
+      <feGaussianBlur stdDeviation="4" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="glow3inf">
+      <feGaussianBlur stdDeviation="7" result="blur1"/>
+      <feGaussianBlur stdDeviation="3" result="blur2"/>
+      <feMerge>
+        <feMergeNode in="blur1"/>
+        <feMergeNode in="blur2"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- 外层装饰椭圆轨道 -->
+  <ellipse cx="280" cy="155" rx="248" ry="110"
+    fill="none"
+    stroke="url(#ringGrad3)"
+    stroke-width="0.8"
+    opacity="0.4"/>
+  <ellipse cx="280" cy="155" rx="228" ry="95"
+    fill="none"
+    stroke="rgba(0,212,255,0.06)"
+    stroke-width="1.2"/>
+  <ellipse cx="280" cy="155" rx="208" ry="80"
+    fill="none"
+    stroke="rgba(124,58,237,0.05)"
+    stroke-width="0.8"/>
+
+  <!-- 左右扫描线 -->
+  <line x1="10" y1="155" x2="80" y2="155" stroke="#00d4ff" stroke-width="0.8" opacity="0.5"/>
+  <line x1="480" y1="155" x2="550" y2="155" stroke="#7c3aed" stroke-width="0.8" opacity="0.5"/>
+  <circle cx="10" cy="155" r="3.5" fill="#00d4ff" opacity="0.7"/>
+  <circle cx="550" cy="155" r="3.5" fill="#7c3aed" opacity="0.7"/>
+  <!-- 扫描线小节点 -->
+  <circle cx="40" cy="155" r="1.5" fill="#00d4ff" opacity="0.4"/>
+  <circle cx="520" cy="155" r="1.5" fill="#7c3aed" opacity="0.4"/>
+
+  <!-- 主标题 Token -->
+  <text x="280" y="148"
+    text-anchor="middle"
+    font-family="'Segoe UI', 'SF Pro Display', Arial, sans-serif"
+    font-size="88"
+    font-weight="800"
+    letter-spacing="-2"
+    fill="url(#textGrad3)"
+    filter="url(#glow3t)">Token</text>
+
+  <!-- ∞ 符号居中，在文字下方 -->
+  <g transform="translate(280,202)" filter="url(#glow3inf)">
+    <!-- 外层主体 -->
+    <path d="M 68 0 C 68 -34, 26 -34, 0 0 C -26 34, -68 34, -68 0 C -68 -34, -26 -34, 0 0 C 26 34, 68 34, 68 0 Z"
+      fill="none"
+      stroke="url(#infGrad3)"
+      stroke-width="8"
+      stroke-linecap="round"
+    />
+    <!-- 内层细线 -->
+    <path d="M 46 0 C 46 -22, 18 -22, 0 0 C -18 22, -46 22, -46 0 C -46 -22, -18 -22, 0 0 C 18 22, 46 22, 46 0 Z"
+      fill="none"
+      stroke="rgba(0,212,255,0.15)"
+      stroke-width="2"
+      stroke-linecap="round"
+    />
+    <!-- 三个节点 -->
+    <circle cx="-68" cy="0" r="5" fill="#00d4ff" opacity="0.9"/>
+    <circle cx="68" cy="0" r="5" fill="#7c3aed" opacity="0.9"/>
+    <circle cx="0" cy="0" r="4" fill="rgba(255,255,255,0.7)"/>
+    <!-- 节点光晕 -->
+    <circle cx="-68" cy="0" r="9" fill="none" stroke="#00d4ff" stroke-width="1" opacity="0.3"/>
+    <circle cx="68" cy="0" r="9" fill="none" stroke="#7c3aed" stroke-width="1" opacity="0.3"/>
+  </g>
+
+  <!-- 装饰角点 -->
+  <circle cx="140" cy="62" r="1.5" fill="#00d4ff" opacity="0.3"/>
+  <circle cx="420" cy="62" r="1.5" fill="#7c3aed" opacity="0.3"/>
+  <circle cx="110" cy="80" r="1" fill="#00d4ff" opacity="0.2"/>
+  <circle cx="450" cy="80" r="1" fill="#7c3aed" opacity="0.2"/>
+
+  <!-- 域名 -->
+  <text x="280" y="296"
+    text-anchor="middle"
+    font-family="'Segoe UI', Arial, sans-serif"
+    font-size="13"
+    font-weight="400"
+    letter-spacing="8"
+    fill="#1a4060"
+    opacity="0.9">TOKEN00.COM</text>
+</svg>

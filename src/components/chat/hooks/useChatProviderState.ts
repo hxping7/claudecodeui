@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { authenticatedFetch } from '../../../utils/api';
-import { CLAUDE_MODELS, CODEX_MODELS, CURSOR_MODELS, GEMINI_MODELS } from '../../../../shared/modelConstants';
+import { CLAUDE_MODELS, CODEX_MODELS, CURSOR_MODELS, GEMINI_MODELS, TOKENC_MODELS } from '../../../../shared/modelConstants';
 import type { PendingPermissionRequest, PermissionMode } from '../types/types';
 import type { ProjectSession, LLMProvider } from '../../../types/app';
 
@@ -35,6 +35,9 @@ export function useChatProviderState({ selectedSession }: UseChatProviderStateAr
   });
   const [geminiModel, setGeminiModel] = useState<string>(() => {
     return localStorage.getItem('gemini-model') || GEMINI_MODELS.DEFAULT;
+  });
+  const [tokencModel, setTokencModel] = useState<string>(() => {
+    return localStorage.getItem('tokenc-model') || TOKENC_MODELS.DEFAULT;
   });
 
   const lastProviderRef = useRef(provider);
@@ -118,6 +121,8 @@ export function useChatProviderState({ selectedSession }: UseChatProviderStateAr
     setCodexModel,
     geminiModel,
     setGeminiModel,
+    tokencModel,
+    setTokencModel,
     permissionMode,
     setPermissionMode,
     pendingPermissionRequests,

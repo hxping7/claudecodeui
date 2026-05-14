@@ -77,6 +77,8 @@ function ChatInterface({
     setCodexModel,
     geminiModel,
     setGeminiModel,
+    tokencModel,
+    setTokencModel,
     permissionMode,
     pendingPermissionRequests,
     setPendingPermissionRequests,
@@ -188,6 +190,7 @@ function ChatInterface({
     claudeModel,
     codexModel,
     geminiModel,
+    tokencModel,
     isLoading,
     canAbortSession,
     tokenBudget,
@@ -226,13 +229,14 @@ function ChatInterface({
   const handleQueueMessage = useCallback((content: string, images: unknown[]) => {
     const currentModel = provider === 'claude' ? claudeModel :
                         provider === 'codex' ? codexModel :
-                        provider === 'gemini' ? geminiModel : cursorModel;
+                        provider === 'gemini' ? geminiModel :
+                        provider === 'tokenc' ? tokencModel : cursorModel;
     addToQueue(content, {
       images,
       provider,
       model: currentModel,
     });
-  }, [provider, claudeModel, codexModel, geminiModel, cursorModel, addToQueue]);
+  }, [provider, claudeModel, codexModel, geminiModel, tokencModel, cursorModel, addToQueue]);
 
   // Handle processing queue immediately (sends now)
   const handleProcessQueueNow = useCallback(() => {
@@ -383,6 +387,8 @@ function ChatInterface({
           setCodexModel={setCodexModel}
           geminiModel={geminiModel}
           setGeminiModel={setGeminiModel}
+          tokencModel={tokencModel}
+          setTokencModel={setTokencModel}
           tasksEnabled={tasksEnabled}
           isTaskMasterInstalled={isTaskMasterInstalled}
           onShowAllTasks={onShowAllTasks}
@@ -482,7 +488,9 @@ function ChatInterface({
                 ? codexModel
                 : provider === 'gemini'
                   ? geminiModel
-                  : cursorModel
+                  : provider === 'tokenc'
+                    ? tokencModel
+                    : cursorModel
           }
           onModelChange={(model) => {
             if (provider === 'claude') {
@@ -494,6 +502,9 @@ function ChatInterface({
             } else if (provider === 'gemini') {
               setGeminiModel(model);
               localStorage.setItem('gemini-model', model);
+            } else if (provider === 'tokenc') {
+              setTokencModel(model);
+              localStorage.setItem('tokenc-model', model);
             } else {
               setCursorModel(model);
               localStorage.setItem('cursor-model', model);

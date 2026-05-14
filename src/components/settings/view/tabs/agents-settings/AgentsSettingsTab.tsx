@@ -16,6 +16,7 @@ const AGENT_NAMES: Record<AgentProvider, string> = {
   cursor: 'Cursor',
   codex: 'Codex',
   gemini: 'Gemini',
+  tokenc: 'Tokenc',
 };
 
 export default function AgentsSettingsTab({
@@ -43,11 +44,11 @@ export default function AgentsSettingsTab({
   } = useVisibleProviders();
 
   // Admin-controlled allowed providers
-  const adminAllowedProviders = uiConfig.allowedProviders || ['claude', 'cursor', 'codex', 'gemini'];
+  const adminAllowedProviders = uiConfig.allowedProviders || ['claude', 'cursor', 'codex', 'gemini', 'tokenc'];
 
   // All available agents (excluding cursor on Windows server, and filtered by admin settings)
   const allAgents = useMemo<AgentProvider[]>(() => {
-    const agents: AgentProvider[] = ['claude', 'cursor', 'codex', 'gemini'];
+    const agents: AgentProvider[] = ['claude', 'cursor', 'codex', 'gemini', 'tokenc'];
     // Filter by admin-allowed providers
     const filtered = agents.filter((id) => adminAllowedProviders.includes(id)) as AgentProvider[];
     // Exclude cursor on Windows
@@ -111,12 +112,17 @@ export default function AgentsSettingsTab({
       authStatus: providerAuthStatus.gemini,
       onLogin: () => onProviderLogin('gemini'),
     },
+    tokenc: {
+      authStatus: providerAuthStatus.tokenc,
+      onLogin: () => onProviderLogin('tokenc'),
+    },
   }), [
     onProviderLogin,
     providerAuthStatus.claude,
     providerAuthStatus.codex,
     providerAuthStatus.cursor,
     providerAuthStatus.gemini,
+    providerAuthStatus.tokenc,
   ]);
 
   return (

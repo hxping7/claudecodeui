@@ -96,6 +96,19 @@ export const GEMINI_MODELS = {
 };
 
 /**
+ * Tokenc Models (compatible with Claude)
+ */
+export const TOKENC_MODELS = {
+  OPTIONS: [
+    { value: "opus", label: "Opus" },
+    { value: "sonnet", label: "Sonnet" },
+    { value: "haiku", label: "Haiku" },
+  ],
+
+  DEFAULT: "opus",
+};
+
+/**
  * Ordered provider registry. Display order in selection UIs.
  */
 export const PROVIDERS = [
@@ -103,4 +116,5 @@ export const PROVIDERS = [
   { id: "codex", name: "OpenAI", models: CODEX_MODELS },
   { id: "gemini", name: "Google", models: GEMINI_MODELS },
   { id: "cursor", name: "Cursor", models: CURSOR_MODELS },
+  { id: "tokenc", name: "Tokenc", models: TOKENC_MODELS },
 ];

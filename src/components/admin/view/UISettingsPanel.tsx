@@ -38,7 +38,7 @@ const defaultConfig: UIConfig = {
   showSettingsPlugins: true,
   showSettingsNotifications: true,
   showSettingsAbout: true,
-  allowedProviders: ['claude', 'cursor', 'codex', 'gemini'],
+  allowedProviders: ['claude', 'cursor', 'codex', 'gemini', 'tokenc'],
   disableVersionCheck: false,
 };
 
@@ -47,6 +47,7 @@ const PROVIDER_NAMES: Record<string, string> = {
   cursor: 'Cursor',
   codex: 'Codex',
   gemini: 'Gemini',
+  tokenc: 'Tokenc',
 };
 
 export default function UISettingsPanel() {
@@ -353,9 +354,9 @@ export default function UISettingsPanel() {
         <p className="text-sm text-muted-foreground">{t('uiSettings.allowedProvidersDescription')}</p>
 
         <div className="space-y-3">
-          {['claude', 'cursor', 'codex', 'gemini'].map((provider) => {
-            const isAllowed = (config.allowedProviders || ['claude', 'cursor', 'codex', 'gemini']).includes(provider);
-            const isOnlyAllowed = (config.allowedProviders?.length || 4) === 1 && isAllowed;
+          {['claude', 'cursor', 'codex', 'gemini', 'tokenc'].map((provider) => {
+            const isAllowed = (config.allowedProviders || ['claude', 'cursor', 'codex', 'gemini', 'tokenc']).includes(provider);
+            const isOnlyAllowed = (config.allowedProviders?.length || 5) === 1 && isAllowed;
 
             return (
               <label

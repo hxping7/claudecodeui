@@ -42,7 +42,7 @@ const defaultConfig: UIConfig = {
   showSettingsPlugins: true,
   showSettingsNotifications: true,
   showSettingsAbout: true,
-  allowedProviders: ['claude', 'cursor', 'codex', 'gemini'],
+  allowedProviders: ['claude', 'cursor', 'codex', 'gemini', 'tokenc'],
   disableVersionCheck: false,
 };
 

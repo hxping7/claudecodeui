@@ -40,6 +40,7 @@ interface UseChatComposerStateArgs {
   claudeModel: string;
   codexModel: string;
   geminiModel: string;
+  tokencModel: string;
   isLoading: boolean;
   canAbortSession: boolean;
   tokenBudget: Record<string, unknown> | null;
@@ -112,6 +113,7 @@ export function useChatComposerState({
   claudeModel,
   codexModel,
   geminiModel,
+  tokencModel,
   isLoading,
   canAbortSession,
   tokenBudget,

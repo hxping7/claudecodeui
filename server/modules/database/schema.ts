@@ -130,6 +130,9 @@ CREATE TABLE IF NOT EXISTS agent_config (
     -- Cursor
     cursor_base_url TEXT,
     cursor_api_key_encrypted TEXT,
+    -- Tokenc
+    tokenc_base_url TEXT,
+    tokenc_api_key_encrypted TEXT,
     -- Metadata
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_by INTEGER REFERENCES users(id)
@@ -157,6 +160,10 @@ CREATE TABLE IF NOT EXISTS user_agent_config (
     cursor_base_url TEXT,
     cursor_api_key_encrypted TEXT,
     cursor_default_model TEXT,
+    -- Tokenc
+    tokenc_base_url TEXT,
+    tokenc_api_key_encrypted TEXT,
+    tokenc_default_model TEXT,
     -- Metadata
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,

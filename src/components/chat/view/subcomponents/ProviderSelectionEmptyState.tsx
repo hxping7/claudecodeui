@@ -11,6 +11,7 @@ import {
   CURSOR_MODELS,
   CODEX_MODELS,
   GEMINI_MODELS,
+  TOKENC_MODELS,
   PROVIDERS,
 } from "../../../../../shared/modelConstants";
 import type { ProjectSession, LLMProvider } from "../../../../types/app";
@@ -46,6 +47,8 @@ type ProviderSelectionEmptyStateProps = {
   setCodexModel: (model: string) => void;
   geminiModel: string;
   setGeminiModel: (model: string) => void;
+  tokencModel: string;
+  setTokencModel: (model: string) => void;
   tasksEnabled: boolean;
   isTaskMasterInstalled: boolean | null;
   onShowAllTasks?: (() => void) | null;
@@ -69,6 +72,7 @@ function getModelConfig(p: LLMProvider) {
   if (p === "claude") return CLAUDE_MODELS;
   if (p === "codex") return CODEX_MODELS;
   if (p === "gemini") return GEMINI_MODELS;
+  if (p === "tokenc") return TOKENC_MODELS;
   return CURSOR_MODELS;
 }
 
@@ -78,10 +82,12 @@ function getCurrentModel(
   cu: string,
   co: string,
   g: string,
+  t: string,
 ) {
   if (p === "claude") return c;
   if (p === "codex") return co;
   if (p === "gemini") return g;
+  if (p === "tokenc") return t;
   return cu;
 }
 
@@ -89,7 +95,8 @@ function getProviderDisplayName(p: LLMProvider) {
   if (p === "claude") return "Claude";
   if (p === "cursor") return "Cursor";
   if (p === "codex") return "Codex";
-  return "Gemini";
+  if (p === "gemini") return "Gemini";
+  return "Tokenc";
 }
 
 export default function ProviderSelectionEmptyState({
@@ -106,6 +113,8 @@ export default function ProviderSelectionEmptyState({
   setCodexModel,
   geminiModel,
   setGeminiModel,
+  tokencModel,
+  setTokencModel,
   tasksEnabled,
   isTaskMasterInstalled,
   onShowAllTasks,
@@ -177,12 +186,15 @@ export default function ProviderSelectionEmptyState({
       } else if (providerId === "gemini") {
         setGeminiModel(modelValue);
         localStorage.setItem("gemini-model", modelValue);
+      } else if (providerId === "tokenc") {
+        setTokencModel(modelValue);
+        localStorage.setItem("tokenc-model", modelValue);
       } else {
         setCursorModel(modelValue);
         localStorage.setItem("cursor-model", modelValue);
       }
     },
-    [setClaudeModel, setCursorModel, setCodexModel, setGeminiModel],
+    [setClaudeModel, setCursorModel, setCodexModel, setGeminiModel, setTokencModel],
   );
 
   const nextTaskPrompt = t("tasks.nextTaskPrompt", {
@@ -195,6 +207,7 @@ export default function ProviderSelectionEmptyState({
     cursorModel,
     codexModel,
     geminiModel,
+    tokencModel,
   );
 
   // Get label from mapped models or fallback to static
@@ -325,19 +338,22 @@ export default function ProviderSelectionEmptyState({
           <p className="mt-4 text-center text-sm text-muted-foreground/70">
             {
               {
-                claude: t("providerSelection.readyPrompt.claude", {
-                  model: claudeModel,
-                }),
-                cursor: t("providerSelection.readyPrompt.cursor", {
-                  model: cursorModel,
-                }),
-                codex: t("providerSelection.readyPrompt.codex", {
-                  model: codexModel,
-                }),
-                gemini: t("providerSelection.readyPrompt.gemini", {
-                  model: geminiModel,
-                }),
-              }[provider]
+              claude: t("providerSelection.readyPrompt.claude", {
+                model: claudeModel,
+              }),
+              cursor: t("providerSelection.readyPrompt.cursor", {
+                model: cursorModel,
+              }),
+              codex: t("providerSelection.readyPrompt.codex", {
+                model: codexModel,
+              }),
+              gemini: t("providerSelection.readyPrompt.gemini", {
+                model: geminiModel,
+              }),
+              tokenc: t("providerSelection.readyPrompt.tokenc", {
+                model: tokencModel,
+              }),
+            }[provider]
             }
           </p>
 

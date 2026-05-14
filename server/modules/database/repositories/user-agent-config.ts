@@ -22,6 +22,9 @@ type UserAgentConfigRow = {
   cursor_base_url: string | null;
   cursor_api_key_encrypted: string | null;
   cursor_default_model: string | null;
+  tokenc_base_url: string | null;
+  tokenc_api_key_encrypted: string | null;
+  tokenc_default_model: string | null;
   created_at: string | null;
   updated_at: string | null;
 };
@@ -35,6 +38,8 @@ export type UserAgentConfig = {
   geminiDefaultModel: string | null;
   cursorBaseUrl: string | null;
   cursorDefaultModel: string | null;
+  tokencBaseUrl: string | null;
+  tokencDefaultModel: string | null;
   updatedAt: string | null;
 };
 
@@ -89,6 +94,11 @@ const PROVIDER_COLUMNS = {
     apiKey: 'cursor_api_key_encrypted',
     defaultModel: 'cursor_default_model',
   },
+  tokenc: {
+    baseUrl: 'tokenc_base_url',
+    apiKey: 'tokenc_api_key_encrypted',
+    defaultModel: 'tokenc_default_model',
+  },
 } as const;
 
 type Provider = keyof typeof PROVIDER_COLUMNS;
@@ -110,6 +120,8 @@ export const userAgentConfigDb = {
       geminiDefaultModel: row.gemini_default_model,
       cursorBaseUrl: row.cursor_base_url,
       cursorDefaultModel: row.cursor_default_model,
+      tokencBaseUrl: row.tokenc_base_url,
+      tokencDefaultModel: row.tokenc_default_model,
       updatedAt: row.updated_at,
     };
   },
@@ -157,6 +169,9 @@ export const userAgentConfigDb = {
     cursorBaseUrl?: string | null;
     cursorApiKey?: string | null;
     cursorDefaultModel?: string | null;
+    tokencBaseUrl?: string | null;
+    tokencApiKey?: string | null;
+    tokencDefaultModel?: string | null;
   }): void {
     const db = getConnection();
     const updates: string[] = [];
@@ -211,6 +226,18 @@ export const userAgentConfigDb = {
       updates.push('cursor_default_model = ?');
       values.push(config.cursorDefaultModel);
     }
+    if (config.tokencBaseUrl !== undefined) {
+      updates.push('tokenc_base_url = ?');
+      values.push(config.tokencBaseUrl);
+    }
+    if (config.tokencApiKey !== undefined) {
+      updates.push('tokenc_api_key_encrypted = ?');
+      values.push(config.tokencApiKey ? encrypt(config.tokencApiKey) : null);
+    }
+    if (config.tokencDefaultModel !== undefined) {
+      updates.push('tokenc_default_model = ?');
+      values.push(config.tokencDefaultModel);
+    }
 
     if (updates.length === 0) return;
 
@@ -250,6 +277,9 @@ export const userAgentConfigDb = {
         case 'cursor':
           env.CURSOR_BASE_URL = userConfig.baseUrl;
           break;
+        case 'tokenc':
+          env.TOKENC_BASE_URL = userConfig.baseUrl;
+          break;
       }
     }
 
@@ -266,6 +296,9 @@ export const userAgentConfigDb = {
           break;
         case 'cursor':
           env.CURSOR_API_KEY = userConfig.apiKey;
+          break;
+        case 'tokenc':
+          env.TOKENC_API_KEY = userConfig.apiKey;
           break;
       }
     }

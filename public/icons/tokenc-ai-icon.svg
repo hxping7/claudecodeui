@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" fill="none">
+  <defs>
+    <linearGradient id="infGrad" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#00d4ff"/>
+      <stop offset="50%" stop-color="#7c3aed"/>
+      <stop offset="100%" stop-color="#00d4ff"/>
+    </linearGradient>
+    <filter id="glowStrong">
+      <feGaussianBlur stdDeviation="3" result="blur1"/>
+      <feGaussianBlur stdDeviation="1.5" result="blur2"/>
+      <feMerge>
+        <feMergeNode in="blur1"/>
+        <feMergeNode in="blur2"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- 深色背景 -->
+  <circle cx="50" cy="50" r="48" fill="#0a0e1a"/>
+
+  <!-- 无穷大符号主体 -->
+  <g transform="translate(50,52)" filter="url(#glowStrong)">
+    <!-- 外层粗线 -->
+    <path d="M 32 0 C 32 -16, 12 -16, 0 0 C -12 16, -32 16, -32 0 C -32 -16, -12 -16, 0 0 C 12 16, 32 16, 32 0 Z"
+      fill="none"
+      stroke="url(#infGrad)"
+      stroke-width="5"
+      stroke-linecap="round"
+    />
+    <!-- 内层细线 -->
+    <path d="M 22 0 C 22 -10, 8 -10, 0 0 C -8 10, -22 10, -22 0 C -22 -10, -8 -10, 0 0 C 8 10, 22 10, 22 0 Z"
+      fill="none"
+      stroke="rgba(0,212,255,0.25)"
+      stroke-width="1.5"
+      stroke-linecap="round"
+    />
+    
+    <!-- 中心节点 - 橙色 -->
+    <circle cx="0" cy="0" r="2.5" fill="#f97316"/>
+  </g>
+
+  <!-- 装饰性外圈光晕 -->
+  <circle cx="50" cy="50" r="46" fill="none" stroke="rgba(0,212,255,0.08)" stroke-width="0.8"/>
+  <circle cx="50" cy="50" r="44" fill="none" stroke="rgba(124,58,237,0.06)" stroke-width="0.6"/>
+</svg>

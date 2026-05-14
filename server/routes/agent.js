@@ -10,6 +10,7 @@ import { spawnCursor } from '../cursor-cli.js';
 import { queryCodex } from '../openai-codex.js';
 import { mkdirAsUser, getUserIdentity } from '../utils/fileOpsAsUser.js';
 import { spawnGemini } from '../gemini-cli.js';
+import { spawnTokenc } from '../tokenc-cli.js';
 import { Octokit } from '@octokit/rest';
 import { CLAUDE_MODELS, CURSOR_MODELS, CODEX_MODELS } from '../../shared/modelConstants.js';
 import { IS_PLATFORM } from '../constants/config.js';
@@ -1012,6 +1013,20 @@ router.post('/', validateExternalApiKey, async (req, res) => {
         cwd: finalProjectPath,
         sessionId: sessionId || null,
         model: model,
+        skipPermissions: true,
+        userUid: req.user?.uid,
+        userGid: req.user?.gid,
+        username: req.user?.username,
+        homeDir: req.user?.home_dir,
+      }, writer);
+    } else if (provider === 'tokenc') {
+      console.log('🔑 Starting Tokenc CLI session');
+
+      await spawnTokenc(message.trim(), {
+        projectPath: finalProjectPath,
+        cwd: finalProjectPath,
+        sessionId: sessionId || null,
+        model: model || undefined,
         skipPermissions: true,
         userUid: req.user?.uid,
         userGid: req.user?.gid,

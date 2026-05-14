@@ -740,6 +740,19 @@ export const runMigrations = (db: Database) => {
     // User agent config table (per-user configuration)
     db.exec(USER_AGENT_CONFIG_TABLE_SCHEMA_SQL);
 
+    // Add Tokenc columns to agent_config table if they don't exist
+    const agentConfigTableInfo = getTableInfo(db, 'agent_config');
+    const agentConfigColumnNames = agentConfigTableInfo.map((column) => column.name);
+    addColumnToTableIfNotExists(db, 'agent_config', agentConfigColumnNames, 'tokenc_base_url', 'TEXT');
+    addColumnToTableIfNotExists(db, 'agent_config', agentConfigColumnNames, 'tokenc_api_key_encrypted', 'TEXT');
+
+    // Add Tokenc columns to user_agent_config table if they don't exist
+    const userAgentConfigTableInfo = getTableInfo(db, 'user_agent_config');
+    const userAgentConfigColumnNames = userAgentConfigTableInfo.map((column) => column.name);
+    addColumnToTableIfNotExists(db, 'user_agent_config', userAgentConfigColumnNames, 'tokenc_base_url', 'TEXT');
+    addColumnToTableIfNotExists(db, 'user_agent_config', userAgentConfigColumnNames, 'tokenc_api_key_encrypted', 'TEXT');
+    addColumnToTableIfNotExists(db, 'user_agent_config', userAgentConfigColumnNames, 'tokenc_default_model', 'TEXT');
+
     // Migration: Allow multiple projects per directory
     // 1. Remove UNIQUE constraint from project_path
     // 2. Add project_id to sessions table

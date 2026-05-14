@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { authenticatedFetch } from '../utils/api';
 import type { AgentProvider } from '../components/settings/types/types';
 
-const DEFAULT_VISIBLE_PROVIDERS: AgentProvider[] = ['claude', 'cursor', 'codex', 'gemini'];
+const DEFAULT_VISIBLE_PROVIDERS: AgentProvider[] = ['claude', 'cursor', 'codex', 'gemini', 'tokenc'];
 
 type VisibleProvidersResponse = {
   success: boolean;
