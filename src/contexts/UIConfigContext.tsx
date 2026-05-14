@@ -71,7 +71,9 @@ export const UIConfigProvider = ({ children }: { children: ReactNode }) => {
   const refreshConfig = useCallback(async () => {
     try {
       setIsLoading(true);
-      const response = await api.get('/settings/ui-config');
+      // Try authenticated endpoint first, fall back to public endpoint
+      const url = token ? '/settings/ui-config' : '/public/ui-config';
+      const response = await api.get(url);
       const data = await response.json();
       const config = data?.config || defaultConfig;
       setConfig(config);
@@ -84,24 +86,14 @@ export const UIConfigProvider = ({ children }: { children: ReactNode }) => {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [token]);
 
   useEffect(() => {
-    // In OSS mode: load config immediately on mount
-    // In Platform mode: load config when user logs in (token changes from null to a value)
-    if (!IS_PLATFORM) {
-      // OSS mode: always load on mount and when token changes
-      const tokenChanged = previousTokenRef.current !== token;
-      if (tokenChanged) {
-        previousTokenRef.current = token;
-        refreshConfig();
-      }
-    } else {
-      // Platform mode: only load when logged in
-      if (token !== null && previousTokenRef.current !== token) {
-        previousTokenRef.current = token;
-        refreshConfig();
-      }
+    // Load config on mount (including login page) and when token changes
+    const tokenChanged = previousTokenRef.current !== token;
+    if (tokenChanged) {
+      previousTokenRef.current = token;
+      refreshConfig();
     }
   }, [refreshConfig, token]);
 

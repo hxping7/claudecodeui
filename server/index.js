@@ -67,7 +67,7 @@ import pluginsRoutes from './routes/plugins.js';
 import providerRoutes from './modules/providers/provider.routes.js';
 import adminRoutes from './routes/admin.js';
 import { startEnabledPluginServers, stopAllPlugins, getPluginPort } from './utils/plugin-process-manager.js';
-import { initializeDatabase, projectsDb } from './modules/database/index.js';
+import { initializeDatabase, projectsDb, appConfigDb } from './modules/database/index.js';
 import { configureWebPush } from './services/vapid-keys.js';
 import { validateApiKey, authenticateToken, authenticateWebSocket } from './middleware/auth.js';
 import { IS_PLATFORM } from './constants/config.js';
@@ -187,6 +187,37 @@ app.get('/api/settings/logo/:filename', (req, res) => {
     }
 
     res.sendFile(filePath);
+});
+
+// Public UI config endpoint (no authentication required)
+// Used by the login page to show the correct app name and branding
+const DEFAULT_UI_CONFIG = {
+  appName: 'CloudCLI',
+  logoUrl: null,
+  showReportIssue: true,
+  showJoinCommunity: true,
+  showGitHubStar: true,
+  showVersion: true,
+  showSettingsAgents: true,
+  showSettingsAppearance: true,
+  showSettingsGit: true,
+  showSettingsApi: true,
+  showSettingsTasks: true,
+  showSettingsPlugins: true,
+  showSettingsNotifications: true,
+  showSettingsAbout: true,
+  allowedProviders: ['claude', 'cursor', 'codex', 'gemini'],
+  disableVersionCheck: false,
+};
+app.get('/api/public/ui-config', (req, res) => {
+  try {
+    const configValue = appConfigDb.get('ui_config');
+    const uiConfig = configValue ? { ...DEFAULT_UI_CONFIG, ...JSON.parse(configValue) } : DEFAULT_UI_CONFIG;
+    res.json({ success: true, config: uiConfig });
+  } catch (error) {
+    console.error('Error fetching public UI config:', error);
+    res.status(500).json({ error: 'Failed to fetch UI config' });
+  }
 });
 
 // Public endpoint for model mapping - reads from settings.json
