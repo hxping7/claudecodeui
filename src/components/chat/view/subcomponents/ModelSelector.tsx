@@ -33,6 +33,7 @@ export default function ModelSelector({
 }: ModelSelectorProps) {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const dropdownContentRef = useRef<HTMLDivElement>(null);
   const { mappedModels } = useMappedModels();
 
   // Get models - use mapped models if available, otherwise use static
@@ -48,7 +49,10 @@ export default function ModelSelector({
   // Close dropdown when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+      const target = event.target as Node;
+      const isInsideTrigger = dropdownRef.current?.contains(target);
+      const isInsideDropdown = dropdownContentRef.current?.contains(target);
+      if (dropdownRef.current && !isInsideTrigger && !isInsideDropdown) {
         setIsOpen(false);
       }
     };
@@ -63,6 +67,7 @@ export default function ModelSelector({
 
   const dropdownContent = isOpen && !disabled ? (
     <div
+      ref={dropdownContentRef}
       className="fixed z-[9999] max-h-64 min-w-[180px] overflow-y-auto rounded-lg border border-border/60 bg-card shadow-lg"
       style={{
         bottom: dropdownRef.current
