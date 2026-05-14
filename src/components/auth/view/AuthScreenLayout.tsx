@@ -20,9 +20,9 @@ export default function AuthScreenLayout({
   const { config: uiConfig } = useUIConfig();
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background p-4">
+    <div className="login-page-bg flex min-h-screen items-center justify-center p-4">
       <div className="w-full max-w-md">
-        <div className="space-y-6 rounded-lg border border-border bg-card p-8 shadow-lg">
+        <div className="space-y-6 rounded-lg border border-border/50 bg-white/90 p-8 shadow-2xl backdrop-blur-sm">
           <div className="text-center">
             <div className="mb-4 flex justify-center">
               {logo ?? (

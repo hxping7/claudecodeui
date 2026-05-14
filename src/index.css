@@ -933,4 +933,67 @@
       background-color: transparent;
     }
   }
+
+  /* Login page tech-style blue gradient background */
+  .login-page-bg {
+    position: relative;
+    background: linear-gradient(135deg, #7dd3fc 0%, #38bdf8 30%, #0ea5e9 60%, #0284c7 100%);
+    overflow: hidden;
+  }
+
+  .login-page-bg::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background:
+      radial-gradient(ellipse at 50% 120%, rgba(56, 189, 248, 0.4) 0%, transparent 60%),
+      radial-gradient(ellipse at 80% 20%, rgba(14, 165, 233, 0.35) 0%, transparent 55%),
+      radial-gradient(ellipse at 20% 60%, rgba(125, 211, 252, 0.25) 0%, transparent 50%);
+    animation: login-bg-pulse 10s ease-in-out infinite alternate;
+  }
+
+  .login-page-bg::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background:
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1200 800'%3E%3Cpath d='M0,400 Q300,200 600,350 T1200,300 L1200,800 L0,800 Z' fill='rgba(255,255,255,0.08)'/%3E%3Cpath d='M0,500 Q300,350 600,450 T1200,400 L1200,800 L0,800 Z' fill='rgba(255,255,255,0.05)'/%3E%3Cpath d='M0,600 Q400,480 800,550 T1200,520 L1200,800 L0,800 Z' fill='rgba(255,255,255,0.06)'/%3E%3C/svg%3E") no-repeat center center;
+    background-size: cover;
+    animation: login-flow-wave 15s ease-in-out infinite alternate;
+  }
+
+  @keyframes login-bg-pulse {
+    0% {
+      opacity: 0.6;
+      transform: scale(1) translateY(0);
+    }
+    100% {
+      opacity: 1;
+      transform: scale(1.08) translateY(-20px);
+    }
+  }
+
+  @keyframes login-flow-wave {
+    0% {
+      transform: translateX(0) translateY(0);
+    }
+    50% {
+      transform: translateX(-30px) translateY(-15px);
+    }
+    100% {
+      transform: translateX(20px) translateY(10px);
+    }
+  }
+
+  /* Ensure content is above pseudo-elements */
+  .login-page-bg > * {
+    position: relative;
+    z-index: 10;
+  }
 }
