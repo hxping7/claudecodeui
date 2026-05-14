@@ -1,0 +1,55 @@
+version: '3.8'
+
+services:
+  claude-code-web:
+    build:
+      context: .
+      dockerfile: Dockerfile.pam
+    container_name: claude-code-web
+    restart: unless-stopped
+    ports:
+      - "4000:4000"
+    environment:
+      - NODE_ENV=production
+      - AUTH_MODE=linux
+      - PORT=4000
+      # 设置工作区根目录为 /host_home，所有用户home挂载到这里
+      - WORKSPACES_ROOT=/host_home
+      # 可选：设置哪些Linux用户是admin角色（逗号分隔）
+      - LINUX_ADMIN_USERS=admin,root
+    volumes:
+      # 挂载主机用户数据库（只读）
+      - /etc/passwd:/etc/passwd:ro
+      - /etc/group:/etc/group:ro
+      - /etc/shadow:/etc/shadow:ro
+      - /etc/pam.d:/etc/pam.d:ro
+      - /lib/x86_64-linux-gnu/libpam.so.0:/lib/x86_64-linux-gnu/libpam.so.0:ro
+      - /lib/x86_64-linux-gnu/libpam_misc.so.0:/lib/x86_64-linux-gnu/libpam_misc.so.0:ro
+
+      # 挂载所有用户的home目录（关键！）
+      # 假设所有用户home都在 /home 下
+      - /home:/host_home:rw
+
+      # 可选：持久化数据库和配置
+      - ./data:/app/data
+
+    # 关键：需要特权来执行su命令
+    privileged: true
+
+    # 或者使用cap_add（更安全的替代方案）
+    # cap_add:
+    #   - CAP_SETUID
+    #   - CAP_SETGID
+    #   - CAP_AUDIT_WRITE
+
+    # 保持容器运行并允许调试
+    stdin_open: true
+    tty: true
+
+    # 健康检查
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4000/api/auth/status"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s

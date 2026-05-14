@@ -1,0 +1,49 @@
+# 基于官方Node镜像，添加PAM支持
+FROM node:20-bookworm
+
+# 安装必要的系统工具以支持PAM认证
+RUN apt-get update && apt-get install -y \
+    # PAM认证相关
+    libpam0g \
+    libpam-modules \
+    passwd \
+    # su命令（通常来自login或util-linux）
+    login \
+    util-linux \
+    # 用户查询工具
+    getent \
+    # 其他必要工具
+    curl \
+    ca-certificates \
+    git \
+    # 清理
+    && rm -rf /var/lib/apt/lists/*
+
+# 创建工作目录
+WORKDIR /app
+
+# 复制package文件
+COPY package*.json ./
+
+# 安装依赖
+RUN npm ci --only=production
+
+# 复制应用代码
+COPY . .
+
+# 创建必要的目录
+RUN mkdir -p /app/data /host_home
+
+# 设置适当的权限
+# 注意：实际文件操作将以各Linux用户的uid/gid执行
+RUN chmod 755 /app /host_home
+
+# 暴露端口
+EXPOSE 3000
+
+# 健康检查
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+    CMD curl -f http://localhost:3000/api/auth/status || exit 1
+
+# 启动命令
+CMD ["node", "server/index.js"]
