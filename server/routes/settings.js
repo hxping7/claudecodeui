@@ -15,11 +15,14 @@ const router = express.Router();
 
 // Helper to get current user's home directory with path validation
 const getUserHomeDir = (req) => {
-  const userHome = req.user?.home_dir || os.homedir();
-  // Validate it's an absolute path (superadmin uses app source directory)
+  const userHome = req.user?.home_dir;
+  if (!userHome) {
+    console.error('No user home_dir available');
+    return null;
+  }
   if (!path.isAbsolute(userHome)) {
     console.error('Invalid home directory path:', userHome);
-    return os.homedir();
+    return null;
   }
   return userHome;
 };
@@ -63,6 +66,9 @@ const getProviderSettingsPaths = (userHomeDir) => ({
 // Helper wrapper to get settings paths for current user
 const getSettingsPath = (req, provider) => {
   const userHome = getUserHomeDir(req);
+  if (!userHome) {
+    throw new Error('User home directory not available');
+  }
   return getProviderSettingsPaths(userHome)[provider]();
 };
 
@@ -88,7 +94,7 @@ const readTextFileAsUser = async (filePath, uid, gid, username) => {
   `;
 
   return await new Promise((resolve, reject) => {
-    const env = { ...process.env, HOME: getCurrentUserHomeDir() || process.env.HOME || os.homedir(), TARGET_PATH: filePath };
+    const env = { ...process.env, HOME: getCurrentUserHomeDir() || process.env.HOME, TARGET_PATH: filePath };
     const attemptDirect = () =>
       spawn(process.execPath, ['-e', script], {
         uid,
@@ -209,7 +215,7 @@ const writeTextFileAsUser = async (filePath, content, uid, gid, username) => {
   `;
 
   return await new Promise((resolve, reject) => {
-    const env = { ...process.env, HOME: getCurrentUserHomeDir() || process.env.HOME || os.homedir(), TARGET_PATH: filePath };
+    const env = { ...process.env, HOME: getCurrentUserHomeDir() || process.env.HOME, TARGET_PATH: filePath };
     const attemptDirect = () =>
       spawn(process.execPath, ['-e', script], {
         uid,
@@ -1008,7 +1014,11 @@ router.get('/models', async (req, res) => {
     };
 
     // Read Claude settings
-    const claudeSettingsPath = getProviderSettingsPaths(getUserHomeDir(req)).claude();
+    const userHome = getUserHomeDir(req);
+    if (!userHome) {
+      return res.json({ models: { claude: [], cursor: [], codex: [], gemini: [] } });
+    }
+    const claudeSettingsPath = getProviderSettingsPaths(userHome).claude();
     if (fs.existsSync(claudeSettingsPath)) {
       try {
         const content = fs.readFileSync(claudeSettingsPath, 'utf8');
@@ -1043,7 +1053,7 @@ router.get('/models', async (req, res) => {
     }
 
     // Read Codex/OpenAI settings
-    const codexSettingsPath = getProviderSettingsPaths(getUserHomeDir(req)).codex();
+    const codexSettingsPath = getProviderSettingsPaths(userHome).codex();
     if (fs.existsSync(codexSettingsPath)) {
       try {
         const content = fs.readFileSync(codexSettingsPath, 'utf8');
@@ -1066,7 +1076,7 @@ router.get('/models', async (req, res) => {
     }
 
     // Read Gemini settings
-    const geminiSettingsPath = getProviderSettingsPaths(getUserHomeDir(req)).gemini();
+    const geminiSettingsPath = getProviderSettingsPaths(userHome).gemini();
     if (fs.existsSync(geminiSettingsPath)) {
       try {
         const content = fs.readFileSync(geminiSettingsPath, 'utf8');
@@ -1088,7 +1098,7 @@ router.get('/models', async (req, res) => {
     }
 
     // Read Cursor settings
-    const cursorSettingsPath = getProviderSettingsPaths(getUserHomeDir(req)).cursor();
+    const cursorSettingsPath = getProviderSettingsPaths(userHome).cursor();
     if (fs.existsSync(cursorSettingsPath)) {
       try {
         const content = fs.readFileSync(cursorSettingsPath, 'utf8');

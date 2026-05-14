@@ -30,22 +30,9 @@ import {
 import { sessionsService } from './modules/providers/services/sessions.service.js';
 import { providerAuthService } from './modules/providers/services/provider-auth.service.js';
 import { createNormalizedMessage } from './shared/utils.js';
+import { getCurrentUserHomeDir } from './requestContext.js';
 
-// Global context to store current user info for the request
-// This is set by the authentication middleware
-let currentUserHomeDir = null;
-
-export function setCurrentUserHomeDir(homeDir) {
-  currentUserHomeDir = homeDir;
-}
-
-export function clearCurrentUserHomeDir() {
-  currentUserHomeDir = null;
-}
-
-export function getCurrentUserHomeDir() {
-  return currentUserHomeDir || os.homedir();
-}
+export { getCurrentUserHomeDir };
 
 const activeSessions = new Map();
 const pendingToolApprovals = new Map();
@@ -54,7 +41,23 @@ const TOOL_APPROVAL_TIMEOUT_MS = parseInt(process.env.CLAUDE_TOOL_APPROVAL_TIMEO
 
 const TOOLS_REQUIRING_INTERACTION = new Set(['AskUserQuestion', 'ExitPlanMode']);
 
-// Cache for model mapping from settings.json
+async function appendToHistoryJsonl(homeDir, sessionId, projectPath, displayText) {
+  try {
+    const historyPath = path.join(homeDir, '.claude', 'history.jsonl');
+    const entry = JSON.stringify({
+      display: displayText || '(session)',
+      pastedContents: {},
+      timestamp: Date.now(),
+      project: projectPath || '',
+      sessionId: sessionId
+    });
+    await fs.appendFile(historyPath, entry + '\n');
+    console.log(`[ClaudeSDK] Appended session ${sessionId} to ${historyPath}`);
+  } catch (err) {
+    console.warn(`[ClaudeSDK] Failed to write history.jsonl:`, err.message);
+  }
+}
+
 let modelMappingCache = null;
 let modelMappingCacheForHome = null;
 
@@ -327,12 +330,21 @@ function mapCliOptionsToSDK(options = {}) {
       const { command, args, cwd, env, signal } = spawnOptions;
       console.log(`[ClaudeSDK] spawnClaudeCodeProcess: command=${command}, args=${args?.join(' ')}, uid=${spawnUid}, gid=${spawnGid}, cwd=${cwd}`);
 
+      const homeDir = options.homeDir || `/home/${options.username || process.env.USER || 'unknown'}`;
+      const spawnEnv = {
+        ...env,
+        HOME: homeDir,
+        USER: options.username || process.env.USER || 'unknown',
+        LOGNAME: options.username || process.env.USER || 'unknown',
+      };
+      console.log(`[ClaudeSDK] Spawn environment: HOME=${spawnEnv.HOME}, USER=${spawnEnv.USER}, uid=${spawnUid}`);
+
       const child = spawn(command, args, {
         cwd,
-        env: { ...env },
+        env: spawnEnv,
         uid: spawnUid,
         gid: spawnGid,
-        stdio: ['pipe', 'pipe', 'pipe'],
+        stdio: ['pipe', 'pipe', 'ignore'],
       });
 
       if (signal) {
@@ -345,20 +357,16 @@ function mapCliOptionsToSDK(options = {}) {
       return {
         stdin: child.stdin,
         stdout: child.stdout,
-        stderr: child.stderr,
+        get killed() { return child.killed; },
+        get exitCode() { return child.exitCode; },
         on(event, listener) {
-          if (event === 'exit') {
-            child.on('exit', listener);
-          } else if (event === 'error') {
-            child.on('error', listener);
-          }
+          child.on(event, listener);
         },
         off(event, listener) {
-          if (event === 'exit') {
-            child.off('exit', listener);
-          } else if (event === 'error') {
-            child.off('error', listener);
-          }
+          child.off(event, listener);
+        },
+        once(event, listener) {
+          child.once(event, listener);
         },
         kill(signal) {
           child.kill(signal);
@@ -621,7 +629,8 @@ async function loadMcpConfig(cwd) {
  * @returns {Promise<void>}
  */
 async function queryClaudeSDK(command, options = {}, ws) {
-  const { sessionId, sessionSummary } = options;
+  const { sessionId: originalSessionId, sessionSummary } = options;
+  let sessionId = originalSessionId;  // Use let so we can clear it on resume failure
   let capturedSessionId = sessionId;
   let sessionCreatedSent = false;
   let tempImagePaths = [];
@@ -639,10 +648,12 @@ async function queryClaudeSDK(command, options = {}, ws) {
     // Extract user identity for file ownership (from WebSocket or REST API options)
     const userUid = options.userUid ?? ws?.uid;
     const userGid = options.userGid ?? ws?.gid;
+    const username = options.username ?? ws?.username;
     if (userUid != null && userGid != null) {
       options.userUid = userUid;
       options.userGid = userGid;
-      console.log(`[ClaudeSDK] Spawning Claude CLI as uid=${userUid}, gid=${userGid}`);
+      options.username = username;
+      console.log(`[ClaudeSDK] Spawning Claude CLI as uid=${userUid}, gid=${userGid}, username=${username}`);
     } else {
       console.log(`[ClaudeSDK] No uid/gid available, Claude CLI will run as server process user`);
     }
@@ -765,20 +776,44 @@ async function queryClaudeSDK(command, options = {}, ws) {
     process.env.CLAUDE_CODE_STREAM_CLOSE_TIMEOUT = '300000';
 
     let queryInstance;
+    let retryWithoutResume = false;
     try {
       queryInstance = query({
         prompt: finalCommand,
         options: sdkOptions
       });
     } catch (hookError) {
-      // Older/newer SDK versions may not accept hook shapes yet.
-      // Keep notification behavior operational via runtime events even if hook registration fails.
-      console.warn('Failed to initialize Claude query with hooks, retrying without hooks:', hookError?.message || hookError);
-      delete sdkOptions.hooks;
-      queryInstance = query({
-        prompt: finalCommand,
-        options: sdkOptions
-      });
+      const errorMsg = hookError?.message || '';
+      
+      // Check if error is related to terminated process (often caused by resume failure)
+      if (errorMsg.includes('terminated') && sdkOptions.resume) {
+        console.warn('[ClaudeSDK] Resume failed (process terminated), retrying as new session without resume. Original error:', errorMsg);
+        delete sdkOptions.resume;
+        sessionId = undefined;  // Clear sessionId so a new one will be created
+        retryWithoutResume = true;
+        
+        try {
+          queryInstance = query({
+            prompt: finalCommand,
+            options: sdkOptions
+          });
+        } catch (retryError) {
+          console.warn('[ClaudeSDK] Retry without resume also failed:', retryError?.message || retryError);
+          throw retryError;
+        }
+      } else if (errorMsg.includes('terminated')) {
+        // Terminated but not from resume - throw immediately
+        throw hookError;
+      } else {
+        // Older/newer SDK versions may not accept hook shapes yet.
+        // Keep notification behavior operational via runtime events even if hook registration fails.
+        console.warn('Failed to initialize Claude query with hooks, retrying without hooks:', hookError?.message || hookError);
+        delete sdkOptions.hooks;
+        queryInstance = query({
+          prompt: finalCommand,
+          options: sdkOptions
+        });
+      }
     }
 
     // Restore immediately — Query constructor already captured the value
@@ -795,7 +830,11 @@ async function queryClaudeSDK(command, options = {}, ws) {
 
     // Process streaming messages
     console.log('Starting async generator loop for session:', capturedSessionId || 'NEW');
-    for await (const message of queryInstance) {
+    let messageCount = 0;
+    try {
+      for await (const message of queryInstance) {
+        messageCount++;
+        console.log(`[ClaudeSDK] Received message #${messageCount}: type=${message.type}, subtype=${message.subtype || 'n/a'}, session=${capturedSessionId || sessionId || 'unknown'}`);
       // Capture session ID from first message
       if (message.session_id && !capturedSessionId) {
 
@@ -805,6 +844,12 @@ async function queryClaudeSDK(command, options = {}, ws) {
         // Set session ID on writer
         if (ws.setSessionId && typeof ws.setSessionId === 'function') {
           ws.setSessionId(capturedSessionId);
+        }
+
+        // Register new session in history.jsonl for CLI resume compatibility
+        if (!sessionId) {
+          const homeDirForHistory = options.homeDir || ws?.home_dir || getCurrentUserHomeDir();
+          await appendToHistoryJsonl(homeDirForHistory, capturedSessionId, options.cwd || '', command?.substring(0, 50) || '(session)');
         }
 
         // Send session-created event only once for new sessions
@@ -820,14 +865,24 @@ async function queryClaudeSDK(command, options = {}, ws) {
       const transformedMessage = transformMessage(message);
       const sid = capturedSessionId || sessionId || null;
 
+      console.log(`[ClaudeSDK] normalizeMessage input: type=${transformedMessage.type}, hasMessage=${!!transformedMessage.message}, messageRole=${transformedMessage.message?.role || 'n/a'}, hasContent=${!!transformedMessage.message?.content}, contentType=${Array.isArray(transformedMessage.message?.content) ? 'array[' + transformedMessage.message.content.length + ']' : typeof transformedMessage.message?.content}`);
+      if (Array.isArray(transformedMessage.message?.content) && transformedMessage.message.content.length > 0) {
+        console.log(`[ClaudeSDK] content[0] keys: ${Object.keys(transformedMessage.message.content[0]).join(',')}, type=${transformedMessage.message.content[0].type}, text/thinking preview: ${JSON.stringify(transformedMessage.message.content[0]).substring(0, 200)}`);
+      }
+
       // Use adapter to normalize SDK events into NormalizedMessage[]
       const normalized = sessionsService.normalizeMessage('claude', transformedMessage, sid);
+      console.log(`[ClaudeSDK] normalizeMessage output: ${normalized.length} messages`);
       for (const msg of normalized) {
-        // Preserve parentToolUseId from SDK wrapper for subagent tool grouping
         if (transformedMessage.parentToolUseId && !msg.parentToolUseId) {
           msg.parentToolUseId = transformedMessage.parentToolUseId;
         }
-        ws.send(msg);
+        try {
+          ws.send(msg);
+          console.log(`[ClaudeSDK] ws.send() success: kind=${msg.kind}, sessionId=${msg.sessionId || 'n/a'}`);
+        } catch (sendErr) {
+          console.error(`[ClaudeSDK] ws.send() FAILED: kind=${msg.kind}, error=${sendErr.message}`);
+        }
       }
 
       // Extract and send token budget updates from result messages
@@ -843,6 +898,8 @@ async function queryClaudeSDK(command, options = {}, ws) {
       }
     }
 
+    console.log(`[ClaudeSDK] Async generator loop ended. Total messages: ${messageCount}. Session: ${capturedSessionId || sessionId || 'unknown'}`);
+
     // Clean up session on completion
     if (capturedSessionId) {
       removeSession(capturedSessionId);
@@ -852,7 +909,12 @@ async function queryClaudeSDK(command, options = {}, ws) {
     await cleanupTempFiles(tempImagePaths, tempDir);
 
     // Send completion event
-    ws.send(createNormalizedMessage({ kind: 'complete', exitCode: 0, isNewSession: !sessionId && !!command, sessionId: capturedSessionId, provider: 'claude' }));
+    try {
+      ws.send(createNormalizedMessage({ kind: 'complete', exitCode: 0, isNewSession: !sessionId && !!command, sessionId: capturedSessionId, provider: 'claude' }));
+      console.log(`[ClaudeSDK] ws.send() COMPLETE event success: session=${capturedSessionId || sessionId || 'n/a'}`);
+    } catch (completeErr) {
+      console.error(`[ClaudeSDK] ws.send() COMPLETE event FAILED: error=${completeErr.message}`);
+    }
     notifyRunStopped({
       userId: ws?.userId || null,
       provider: 'claude',
@@ -861,6 +923,11 @@ async function queryClaudeSDK(command, options = {}, ws) {
       stopReason: 'completed'
     });
     // Complete
+
+  } catch (loopError) {
+    console.error(`[ClaudeSDK] Async generator loop error after ${messageCount} messages:`, loopError.message || loopError);
+    throw loopError;
+  }
 
   } catch (error) {
     console.error('SDK query error:', error);

@@ -200,7 +200,10 @@ app.get('/api/public/models', (req, res) => {
     };
 
     // Use authenticated user's home directory for PAM mode
-    const userHome = req.user?.home_dir || os.homedir();
+    const userHome = req.user?.home_dir;
+    if (!userHome) {
+      return res.status(401).json({ error: 'User home directory not available' });
+    }
 
     const PROVIDER_SETTINGS_PATHS = {
       claude: () => path.join(userHome, '.claude', 'settings.json'),
@@ -254,7 +257,10 @@ app.get('/api/models', authenticateToken, (req, res) => {
   };
 
   // Get user's home directory from token or database
-  const userHome = req.user?.home_dir || os.homedir();
+  const userHome = req.user?.home_dir;
+  if (!userHome) {
+    return res.status(401).json({ error: 'User home directory not available' });
+  }
 
   const PROVIDER_SETTINGS_PATHS = {
     claude: () => path.join(userHome, '.claude', 'settings.json'),
@@ -380,7 +386,10 @@ app.post('/api/system/update', authenticateToken, async (req, res) => {
 
         const updateCwd = IS_PLATFORM || installMode === 'git'
             ? projectRoot
-            : os.homedir();
+            : process.env.HOME;
+        if (!updateCwd) {
+          return res.status(500).json({ error: 'Cannot determine working directory for update' });
+        }
 
         const child = spawn('sh', ['-c', updateCommand], {
             cwd: updateCwd,
@@ -1364,7 +1373,10 @@ app.get('/api/projects/:projectId/sessions/:sessionId/token-usage', authenticate
     try {
         const { projectId, sessionId } = req.params;
         const { provider = 'claude' } = req.query;
-        const homeDir = req.user?.home_dir || os.homedir();
+        const homeDir = req.user?.home_dir;
+        if (!homeDir) {
+          return res.status(401).json({ error: 'User home directory not available' });
+        }
 
         // Allow only safe characters in sessionId
         const safeSessionId = String(sessionId).replace(/[^a-zA-Z0-9._-]/g, '');

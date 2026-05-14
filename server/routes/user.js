@@ -15,7 +15,7 @@ function spawnAsync(command, args, options = {}) {
       shell: false,
       env: {
         ...process.env,
-        HOME: getCurrentUserHomeDir() || process.env.HOME || os.homedir(),
+        HOME: getCurrentUserHomeDir() || process.env.HOME,
         ...(options.env || {}),
       },
     });
@@ -42,7 +42,7 @@ router.get('/git-config', authenticateToken, async (req, res) => {
 
     // If database is empty, try to get from system git config
     if (!gitConfig || (!gitConfig.git_name && !gitConfig.git_email)) {
-      const systemConfig = await getSystemGitConfig();
+      const systemConfig = await getSystemGitConfig(req.user?.uid, req.user?.gid);
 
       // If system has values, save them to database for this user
       if (systemConfig.git_name || systemConfig.git_email) {

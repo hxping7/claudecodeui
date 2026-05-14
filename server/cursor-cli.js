@@ -128,7 +128,9 @@ async function spawnCursor(command, options = {}, ws) {
       const cursorProcess = spawnFunction('cursor-agent', args, {
         cwd: workingDir,
         stdio: ['pipe', 'pipe', 'pipe'],
-        env: { ...process.env, HOME: getCurrentUserHomeDir() || process.env.HOME || os.homedir() }
+        env: { ...process.env, HOME: options.homeDir || getCurrentUserHomeDir() || process.env.HOME },
+        uid: options.userUid,
+        gid: options.userGid,
       });
 
       activeCursorProcesses.set(processKey, cursorProcess);

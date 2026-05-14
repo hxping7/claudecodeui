@@ -49,7 +49,7 @@ export const userDb = {
   },
 
   /** Inserts a new user and returns the created ID + username. */
-  createUser(username: string, passwordHash: string, role: 'admin' | 'user' = 'user'): CreateUserResult {
+  createUser(username: string, passwordHash: string, role: 'superadmin' | 'admin' | 'user' = 'user'): CreateUserResult {
     const db = getConnection();
     const result = db
       .prepare('INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)')
@@ -107,7 +107,7 @@ export const userDb = {
     const db = getConnection();
     return db
       .prepare(
-        'SELECT id, username, created_at, last_login, role FROM users WHERE is_active = 1 LIMIT 1'
+        'SELECT id, username, created_at, last_login, role, home_dir FROM users WHERE is_active = 1 LIMIT 1'
       )
       .get() as UserPublicRow | undefined;
   },

@@ -16,6 +16,8 @@ type CloneProjectInput = {
   newGithubToken?: string | null;
   userId: number | string;
   workspaceRoot?: string;
+  uid?: number;
+  gid?: number;
 };
 
 type CloneCompletePayload = {
@@ -45,7 +47,7 @@ type CloneProjectDependencies = {
     tokenId: number,
     userId: number,
   ) => Promise<{ github_token: string } | null>;
-  spawnGitClone: (cloneUrl: string, clonePath: string) => GitCloneProcess;
+  spawnGitClone: (cloneUrl: string, clonePath: string, uid?: number, gid?: number) => GitCloneProcess;
   registerProject: (projectPath: string, customName: string) => Promise<{ project: Record<string, unknown> }>;
   logError: (message: string, error: unknown) => void;
 };
@@ -127,15 +129,21 @@ const defaultDependencies: CloneProjectDependencies = {
       | null;
     return tokenRow;
   },
-  spawnGitClone: (cloneUrl: string, clonePath: string): GitCloneProcess =>
-    spawn('git', ['clone', '--progress', '--', cloneUrl, clonePath], {
+  spawnGitClone: (cloneUrl: string, clonePath: string, uid?: number, gid?: number): GitCloneProcess => {
+    const spawnOpts: any = {
       stdio: ['ignore', 'pipe', 'pipe'],
       env: {
         ...process.env,
-        HOME: getCurrentUserHomeDir() || process.env.HOME || os.homedir(),
+        HOME: getCurrentUserHomeDir() || process.env.HOME,
         GIT_TERMINAL_PROMPT: '0',
       },
-    }) as unknown as GitCloneProcess,
+    };
+    if (typeof uid === 'number' && typeof gid === 'number') {
+      spawnOpts.uid = uid;
+      spawnOpts.gid = gid;
+    }
+    return spawn('git', ['clone', '--progress', '--', cloneUrl, clonePath], spawnOpts) as unknown as GitCloneProcess;
+  },
   registerProject: async (
     projectPath: string,
     customName: string,
@@ -249,7 +257,7 @@ export async function startCloneProject(
   }
 
   handlers.onProgress(`Cloning into '${repoName}'...`);
-  const gitProcess = dependencies.spawnGitClone(cloneUrl, clonePath);
+  const gitProcess = dependencies.spawnGitClone(cloneUrl, clonePath, input.uid, input.gid);
   let lastError = '';
 
   gitProcess.stdout?.on('data', (data: Buffer | string) => {

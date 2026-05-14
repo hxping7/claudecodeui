@@ -242,8 +242,11 @@ router.get(
   '/:provider/auth/status',
   asyncHandler(async (req: Request, res: Response) => {
     const provider = parseProvider(req.params.provider);
-    const homeDir = (req.user as { home_dir?: string } | undefined)?.home_dir;
-    const status = await providerAuthService.getProviderAuthStatus(provider, homeDir);
+    const user = req.user as { home_dir?: string; uid?: number; gid?: number } | undefined;
+    const homeDir = user?.home_dir;
+    const uid = typeof user?.uid === 'number' ? user.uid : undefined;
+    const gid = typeof user?.gid === 'number' ? user.gid : undefined;
+    const status = await providerAuthService.getProviderAuthStatus(provider, homeDir, uid, gid);
     res.json(createApiSuccessResponse(status));
   }),
 );

@@ -33,7 +33,7 @@ export class ClaudeProviderAuth implements IProviderAuth {
   /**
    * Returns Claude installation and credential status using Claude Code's auth priority.
    */
-  async getStatus(homeDir?: string): Promise<ProviderAuthStatus> {
+  async getStatus(homeDir?: string, _uid?: number, _gid?: number): Promise<ProviderAuthStatus> {
     const installed = this.checkInstalled();
 
     if (!installed) {

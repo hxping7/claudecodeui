@@ -173,7 +173,9 @@ async function spawnGemini(command, options = {}, ws) {
         const geminiProcess = spawnFunction(spawnCmd, spawnArgs, {
             cwd: workingDir,
             stdio: ['pipe', 'pipe', 'pipe'],
-            env: { ...process.env, HOME: getCurrentUserHomeDir() || process.env.HOME || os.homedir() }
+            env: { ...process.env, HOME: options.homeDir || getCurrentUserHomeDir() || process.env.HOME },
+            uid: options.userUid,
+            gid: options.userGid,
         });
         let terminalNotificationSent = false;
         let terminalFailureReason = null;

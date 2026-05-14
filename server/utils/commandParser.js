@@ -252,7 +252,7 @@ export function sanitizeOutput(output) {
 export async function processBashCommands(content, options = {}) {
   if (!content) return content;
 
-  const { cwd = process.cwd(), timeout = BASH_TIMEOUT } = options;
+  const { cwd = process.cwd(), timeout = BASH_TIMEOUT, uid, gid } = options;
 
   // Match !command patterns (at start of line or after whitespace)
   const commandPattern = /(?:^|\n)!(.+?)(?=\n|$)/g;
@@ -277,16 +277,21 @@ export async function processBashCommands(content, options = {}) {
 
     try {
       // Execute without shell using execFile with parsed args
+      const execOptions = {
+        cwd,
+        timeout,
+        maxBuffer: 1024 * 1024,
+        shell: false,
+        env: { ...process.env, PATH: process.env.PATH, HOME: getCurrentUserHomeDir() || process.env.HOME }
+      };
+      if (typeof uid === 'number' && typeof gid === 'number') {
+        execOptions.uid = uid;
+        execOptions.gid = gid;
+      }
       const { stdout, stderr } = await execFileAsync(
         validation.command,
         validation.args,
-        {
-          cwd,
-          timeout,
-          maxBuffer: 1024 * 1024, // 1MB max output
-          shell: false, // IMPORTANT: No shell interpretation
-          env: { ...process.env, PATH: process.env.PATH, HOME: getCurrentUserHomeDir() || process.env.HOME || os.homedir() }
-        }
+        execOptions
       );
 
       const output = sanitizeOutput(stdout || stderr || '');

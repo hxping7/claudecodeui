@@ -9,7 +9,10 @@ const router = express.Router();
 // GET /api/cursor/config - Read Cursor CLI configuration.
 router.get('/config', async (req, res) => {
   try {
-    const configPath = path.join(req.user?.home_dir || os.homedir(), '.cursor', 'cli-config.json');
+    const configPath = path.join(req.user?.home_dir || '', '.cursor', 'cli-config.json');
+    if (!req.user?.home_dir) {
+      return res.status(401).json({ error: 'User home directory not available' });
+    }
 
     try {
       const configContent = await fs.readFile(configPath, 'utf8');

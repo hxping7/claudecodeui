@@ -185,6 +185,8 @@ router.get('/clone-progress', async (req, res) => {
         newGithubToken,
         userId,
         workspaceRoot: authenticatedUser?.home_dir,
+        uid: (authenticatedUser as any)?.uid,
+        gid: (authenticatedUser as any)?.gid,
       },
       {
         onProgress: (message) => {

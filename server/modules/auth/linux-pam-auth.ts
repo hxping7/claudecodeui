@@ -1,8 +1,9 @@
-import { exec } from 'child_process';
+import { exec, execFile } from 'child_process';
 import { promisify } from 'util';
 import { randomBytes } from 'crypto';
 
 const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 
 /**
  * Linux PAM Authentication Module
@@ -15,6 +16,15 @@ const execAsync = promisify(exec);
 export type AuthMode = 'database' | 'linux';
 
 /**
+ * Validate username conforms to Linux username rules to prevent command injection.
+ * Valid usernames: start with letter/underscore, contain only [a-z0-9_-], optional trailing $.
+ */
+function validateUsername(username: string): boolean {
+  if (!username || typeof username !== 'string') return false;
+  return /^[a-zA-Z_][a-zA-Z0-9_-]{0,31}\$?$/.test(username);
+}
+
+/**
  * Check if a Linux user exists on the system
  */
 export async function getLinuxUserInfo(username: string): Promise<{
@@ -23,8 +33,12 @@ export async function getLinuxUserInfo(username: string): Promise<{
   uid: number;
   gid: number;
 } | null> {
+  if (!validateUsername(username)) {
+    return null;
+  }
+
   try {
-    const { stdout } = await execAsync(`getent passwd ${username}`, { encoding: 'utf8' });
+    const { stdout } = await execFileAsync('getent', ['passwd', username], { encoding: 'utf8' });
 
     if (!stdout || !stdout.trim()) {
       return null;
@@ -59,6 +73,10 @@ export async function authenticateWithLinux(username: string, password: string):
   gid?: number;
   error?: string;
 }> {
+  if (!validateUsername(username)) {
+    return { success: false, error: 'Invalid username' };
+  }
+
   // First check if user exists
   const userInfo = await getLinuxUserInfo(username);
   if (!userInfo) {

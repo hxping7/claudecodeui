@@ -8,6 +8,7 @@ import type {
   LLMProvider,
 } from '@/shared/types.js';
 import { createNormalizedMessage, parseIncomingJsonObject } from '@/shared/utils.js';
+import { runInRequestContext } from '@/requestContext.js';
 
 type ChatIncomingMessage = AnyRecord & {
   type?: string;
@@ -123,6 +124,12 @@ export function handleChatConnection(
   const writer = new WebSocketWriter(ws, userId);
 
   ws.on('message', async (rawMessage) => {
+    const store = {
+      homeDir: (ws as any).home_dir || null,
+      uid: (ws as any).uid,
+      gid: (ws as any).gid,
+    };
+    runInRequestContext(store, async () => {
     try {
       const parsed = parseIncomingJsonObject(rawMessage);
       if (!parsed) {
@@ -141,6 +148,7 @@ export function handleChatConnection(
           userUid: (ws as any).uid,
           userGid: (ws as any).gid,
           homeDir: (ws as any).home_dir,
+          username: (ws as any).username,
         };
         await dependencies.queryClaudeSDK(data.command ?? '', claudeOptions, writer);
         return;
@@ -152,6 +160,7 @@ export function handleChatConnection(
           userUid: (ws as any).uid,
           userGid: (ws as any).gid,
           homeDir: (ws as any).home_dir,
+          username: (ws as any).username,
         };
         await dependencies.spawnCursor(data.command ?? '', cursorOptions, writer);
         return;
@@ -163,6 +172,7 @@ export function handleChatConnection(
           userUid: (ws as any).uid,
           userGid: (ws as any).gid,
           homeDir: (ws as any).home_dir,
+          username: (ws as any).username,
         };
         await dependencies.queryCodex(data.command ?? '', codexOptions, writer);
         return;
@@ -174,6 +184,7 @@ export function handleChatConnection(
           userUid: (ws as any).uid,
           userGid: (ws as any).gid,
           homeDir: (ws as any).home_dir,
+          username: (ws as any).username,
         };
         await dependencies.spawnGemini(data.command ?? '', geminiOptions, writer);
         return;
@@ -189,6 +200,7 @@ export function handleChatConnection(
             userUid: (ws as any).uid,
             userGid: (ws as any).gid,
             homeDir: (ws as any).home_dir,
+            username: (ws as any).username,
           },
           writer
         );
@@ -310,6 +322,7 @@ export function handleChatConnection(
         error: message,
       });
     }
+    });
   });
 
   ws.on('close', () => {

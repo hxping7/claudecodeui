@@ -6,6 +6,7 @@ import pty, { type IPty } from 'node-pty';
 import { WebSocket, type RawData } from 'ws';
 
 import { getCurrentUserHomeDir } from '@/claude-sdk.js';
+import { runInRequestContext } from '@/requestContext.js';
 import { parseIncomingJsonObject } from '@/shared/utils.js';
 import type { AuthenticatedWebSocketRequest } from '@/shared/types.js';
 
@@ -174,12 +175,23 @@ export function handleShellConnection(
     console.warn(`[WARN] Shell PTY missing user identity! uid=${shellUid}, gid=${shellGid}. Files will be created with server process permissions.`);
   }
 
+  (ws as any).uid = shellUid;
+  (ws as any).gid = shellGid;
+  (ws as any).home_dir = request?.user?.home_dir || null;
+  (ws as any).username = request?.user?.username || null;
+
   let shellProcess: IPty | null = null;
   let ptySessionKey: string | null = null;
   let urlDetectionBuffer = '';
   const announcedAuthUrls = new Set<string>();
 
   ws.on('message', async (rawMessage) => {
+    const store = {
+      homeDir: (ws as any).home_dir || null,
+      uid: (ws as any).uid,
+      gid: (ws as any).gid,
+    };
+    runInRequestContext(store, async () => {
     try {
       const data = parseShellMessage(rawMessage);
       if (!data?.type) {
@@ -285,7 +297,7 @@ export function handleShellConnection(
           cwd: resolvedProjectPath,
           env: {
             ...process.env,
-            HOME: userHome || process.env.HOME || os.homedir(),
+            HOME: userHome || process.env.HOME,
             TERM: 'xterm-256color',
             COLORTERM: 'truecolor',
             FORCE_COLOR: '3',
@@ -469,6 +481,7 @@ export function handleShellConnection(
         );
       }
     }
+    });
   });
 
   ws.on('close', () => {

@@ -39,10 +39,10 @@ async function unlinkJsonlIfExists(filePath: string): Promise<void> {
 }
 
 /**
- * Loads all session rows for the project path and removes each distinct `jsonl_path` file on disk.
+ * Loads all session rows for the project and removes each distinct `jsonl_path` file on disk.
  */
-export async function deleteSessionJsonlFilesForProjectPath(projectPath: string): Promise<void> {
-  const sessions = sessionsDb.getSessionsByProjectPath(projectPath);
+async function deleteSessionJsonlFilesForProjectId(projectId: string): Promise<void> {
+  const sessions = sessionsDb.getSessionsByProjectId(projectId);
   const paths = uniqueJsonlPathsFromSessions(sessions);
 
   for (const filePath of paths) {
@@ -69,7 +69,7 @@ export async function deleteOrArchiveProject(projectId: string, force: boolean):
     return;
   }
 
-  await deleteSessionJsonlFilesForProjectPath(row.project_path);
-  sessionsDb.deleteSessionsByProjectPath(row.project_path);
+  await deleteSessionJsonlFilesForProjectId(projectId);
+  sessionsDb.deleteSessionsByProjectId(projectId);
   projectsDb.deleteProjectById(projectId);
 }

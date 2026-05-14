@@ -14,7 +14,7 @@ const startingPlugins = new Map();
  * The plugin's server entry must print a JSON line with { ready: true, port: <number> }
  * to stdout within 10 seconds.
  */
-export function startPluginServer(name, pluginDir, serverEntry) {
+export function startPluginServer(name, pluginDir, serverEntry, uid, gid) {
   if (runningPlugins.has(name)) {
     return Promise.resolve(runningPlugins.get(name).port);
   }
@@ -28,17 +28,21 @@ export function startPluginServer(name, pluginDir, serverEntry) {
 
     const serverPath = path.join(pluginDir, serverEntry);
 
-    // Restricted env — only essentials, no host secrets
-    const pluginProcess = spawn('node', [serverPath], {
+    const spawnOptions = {
       cwd: pluginDir,
       env: {
         PATH: process.env.PATH,
-        HOME: getCurrentUserHomeDir() || process.env.HOME || os.homedir(),
+        HOME: getCurrentUserHomeDir() || process.env.HOME,
         NODE_ENV: process.env.NODE_ENV || 'production',
         PLUGIN_NAME: name,
       },
       stdio: ['ignore', 'pipe', 'pipe'],
-    });
+    };
+    if (typeof uid === 'number' && typeof gid === 'number') {
+      spawnOptions.uid = uid;
+      spawnOptions.gid = gid;
+    }
+    const pluginProcess = spawn('node', [serverPath], spawnOptions);
 
     let resolved = false;
     let stdout = '';

@@ -5,9 +5,9 @@ export const providerAuthService = {
   /**
    * Resolves a provider and returns its installation/authentication status.
    */
-  async getProviderAuthStatus(providerName: string, homeDir?: string): Promise<ProviderAuthStatus> {
+  async getProviderAuthStatus(providerName: string, homeDir?: string, uid?: number, gid?: number): Promise<ProviderAuthStatus> {
     const provider = providerRegistry.resolveProvider(providerName);
-    return provider.auth.getStatus(homeDir);
+    return provider.auth.getStatus(homeDir, uid, gid);
   },
 
   /**

@@ -26,7 +26,7 @@ export class CursorProviderAuth implements IProviderAuth {
   /**
    * Returns Cursor CLI installation and login status.
    */
-  async getStatus(): Promise<ProviderAuthStatus> {
+  async getStatus(homeDir?: string, uid?: number, gid?: number): Promise<ProviderAuthStatus> {
     const installed = this.checkInstalled();
 
     if (!installed) {
@@ -40,7 +40,7 @@ export class CursorProviderAuth implements IProviderAuth {
       };
     }
 
-    const login = await this.checkCursorLogin();
+    const login = await this.checkCursorLogin(homeDir, uid, gid);
 
     return {
       installed,
@@ -55,7 +55,7 @@ export class CursorProviderAuth implements IProviderAuth {
   /**
    * Runs cursor-agent status and parses the login marker from stdout.
    */
-  private checkCursorLogin(): Promise<CursorLoginStatus> {
+  private checkCursorLogin(homeDir?: string, uid?: number, gid?: number): Promise<CursorLoginStatus> {
     return new Promise((resolve) => {
       let processCompleted = false;
       let childProcess: ReturnType<typeof spawn> | undefined;
@@ -74,7 +74,14 @@ export class CursorProviderAuth implements IProviderAuth {
       }, 5000);
 
       try {
-        childProcess = spawn('cursor-agent', ['status']);
+        const spawnOptions: Record<string, unknown> = {
+          env: { ...process.env, HOME: homeDir || process.env.HOME },
+        };
+        if (typeof uid === 'number' && typeof gid === 'number') {
+          spawnOptions.uid = uid;
+          spawnOptions.gid = gid;
+        }
+        childProcess = spawn('cursor-agent', ['status'], spawnOptions);
       } catch {
         clearTimeout(timeout);
         processCompleted = true;

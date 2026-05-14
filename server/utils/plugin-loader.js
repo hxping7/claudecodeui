@@ -4,8 +4,17 @@ import os from 'os';
 import { spawn } from 'child_process';
 import { getCurrentUserHomeDir } from '../claude-sdk.js';
 
-const PLUGINS_DIR = path.join(os.homedir(), '.claude-code-ui', 'plugins');
-const PLUGINS_CONFIG_PATH = path.join(os.homedir(), '.claude-code-ui', 'plugins.json');
+function _getPluginsBaseDir() {
+  return getCurrentUserHomeDir() || process.env.HOME || os.homedir();
+}
+
+function getPluginsDir() {
+  return path.join(_getPluginsBaseDir(), '.claude-code-ui', 'plugins');
+}
+
+function getPluginsConfigPath() {
+  return path.join(_getPluginsBaseDir(), '.claude-code-ui', 'plugins.json');
+}
 
 const REQUIRED_MANIFEST_FIELDS = ['name', 'displayName', 'entry'];
 
@@ -24,17 +33,21 @@ function sanitizeRepoUrl(raw) {
 const ALLOWED_TYPES = ['react', 'module'];
 const ALLOWED_SLOTS = ['tab'];
 
-export function getPluginsDir() {
-  if (!fs.existsSync(PLUGINS_DIR)) {
-    fs.mkdirSync(PLUGINS_DIR, { recursive: true });
+function _resolvePluginsDir() {
+  const dir = getPluginsDir();
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
   }
-  return PLUGINS_DIR;
+  return dir;
 }
+
+export { getPluginsDir };
 
 export function getPluginsConfig() {
   try {
-    if (fs.existsSync(PLUGINS_CONFIG_PATH)) {
-      return JSON.parse(fs.readFileSync(PLUGINS_CONFIG_PATH, 'utf-8'));
+    const configPath = getPluginsConfigPath();
+    if (fs.existsSync(configPath)) {
+      return JSON.parse(fs.readFileSync(configPath, 'utf-8'));
     }
   } catch {
     // Corrupted config, start fresh
@@ -43,11 +56,12 @@ export function getPluginsConfig() {
 }
 
 export function savePluginsConfig(config) {
-  const dir = path.dirname(PLUGINS_CONFIG_PATH);
+  const configPath = getPluginsConfigPath();
+  const dir = path.dirname(configPath);
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
   }
-  fs.writeFileSync(PLUGINS_CONFIG_PATH, JSON.stringify(config, null, 2), { mode: 0o600 });
+  fs.writeFileSync(configPath, JSON.stringify(config, null, 2), { mode: 0o600 });
 }
 
 export function validateManifest(manifest) {
@@ -97,21 +111,26 @@ export function validateManifest(manifest) {
 const BUILD_TIMEOUT_MS = 60_000;
 
 /** Run `npm run build` if the plugin's package.json declares a build script. */
-function runBuildIfNeeded(dir, packageJsonPath, onSuccess, onError) {
+function runBuildIfNeeded(dir, packageJsonPath, onSuccess, onError, uid, gid, homeDir) {
   try {
     const pkg = JSON.parse(fs.readFileSync(packageJsonPath, 'utf-8'));
     if (!pkg.scripts?.build) {
       return onSuccess();
     }
   } catch {
-    return onSuccess(); // Unreadable package.json — skip build
+    return onSuccess();
   }
 
-  const buildProcess = spawn('npm', ['run', 'build'], {
+  const spawnOptions = {
     cwd: dir,
     stdio: ['ignore', 'pipe', 'pipe'],
-    env: { ...process.env, HOME: getCurrentUserHomeDir() || process.env.HOME || os.homedir() },
-  });
+    env: { ...process.env, HOME: homeDir || getCurrentUserHomeDir() || process.env.HOME },
+  };
+  if (typeof uid === 'number' && typeof gid === 'number') {
+    spawnOptions.uid = uid;
+    spawnOptions.gid = gid;
+  }
+  const buildProcess = spawn('npm', ['run', 'build'], spawnOptions);
 
   let stderr = '';
   let settled = false;
@@ -249,7 +268,7 @@ export function resolvePluginAssetPath(name, assetPath) {
   return realResolved;
 }
 
-export function installPluginFromGit(url) {
+export function installPluginFromGit(url, uid, gid) {
   return new Promise((resolve, reject) => {
     if (typeof url !== 'string' || !url.trim()) {
       return reject(new Error('Invalid URL: must be a non-empty string'));
@@ -295,10 +314,15 @@ export function installPluginFromGit(url) {
       resolve(manifest);
     };
 
-    const gitProcess = spawn('git', ['clone', '--depth', '1', '--', url, tempDir], {
+    const spawnOptions = {
       stdio: ['ignore', 'pipe', 'pipe'],
-      env: { ...process.env, HOME: getCurrentUserHomeDir() || process.env.HOME || os.homedir() },
-    });
+      env: { ...process.env, HOME: getCurrentUserHomeDir() || process.env.HOME },
+    };
+    if (typeof uid === 'number' && typeof gid === 'number') {
+      spawnOptions.uid = uid;
+      spawnOptions.gid = gid;
+    }
+    const gitProcess = spawn('git', ['clone', '--depth', '1', '--', url, tempDir], spawnOptions);
 
     let stderr = '';
     gitProcess.stderr.on('data', (data) => { stderr += data.toString(); });
@@ -341,18 +365,23 @@ export function installPluginFromGit(url) {
       // --ignore-scripts prevents postinstall hooks from executing arbitrary code.
       const packageJsonPath = path.join(tempDir, 'package.json');
       if (fs.existsSync(packageJsonPath)) {
-        const npmProcess = spawn('npm', ['install', '--ignore-scripts'], {
+        const npmSpawnOptions = {
           cwd: tempDir,
           stdio: ['ignore', 'pipe', 'pipe'],
-          env: { ...process.env, HOME: getCurrentUserHomeDir() || process.env.HOME || os.homedir() },
-        });
+          env: { ...process.env, HOME: getCurrentUserHomeDir() || process.env.HOME },
+        };
+        if (typeof uid === 'number' && typeof gid === 'number') {
+          npmSpawnOptions.uid = uid;
+          npmSpawnOptions.gid = gid;
+        }
+        const npmProcess = spawn('npm', ['install', '--ignore-scripts'], npmSpawnOptions);
 
         npmProcess.on('close', (npmCode) => {
           if (npmCode !== 0) {
             cleanupTemp();
             return reject(new Error(`npm install for ${repoName} failed (exit code ${npmCode})`));
           }
-          runBuildIfNeeded(tempDir, packageJsonPath, () => finalize(manifest), (err) => { cleanupTemp(); reject(err); });
+          runBuildIfNeeded(tempDir, packageJsonPath, () => finalize(manifest), (err) => { cleanupTemp(); reject(err); }, uid, gid, getCurrentUserHomeDir());
         });
 
         npmProcess.on('error', (err) => {
@@ -371,7 +400,7 @@ export function installPluginFromGit(url) {
   });
 }
 
-export function updatePluginFromGit(name) {
+export function updatePluginFromGit(name, uid, gid) {
   return new Promise((resolve, reject) => {
     const pluginDir = getPluginDir(name);
     if (!pluginDir) {
@@ -379,11 +408,16 @@ export function updatePluginFromGit(name) {
     }
 
     // Only fast-forward to avoid silent divergence
-    const gitProcess = spawn('git', ['pull', '--ff-only', '--'], {
+    const gitSpawnOptions = {
       cwd: pluginDir,
       stdio: ['ignore', 'pipe', 'pipe'],
-      env: { ...process.env, HOME: getCurrentUserHomeDir() || process.env.HOME || os.homedir() },
-    });
+      env: { ...process.env, HOME: getCurrentUserHomeDir() || process.env.HOME },
+    };
+    if (typeof uid === 'number' && typeof gid === 'number') {
+      gitSpawnOptions.uid = uid;
+      gitSpawnOptions.gid = gid;
+    }
+    const gitProcess = spawn('git', ['pull', '--ff-only', '--'], gitSpawnOptions);
 
     let stderr = '';
     gitProcess.stderr.on('data', (data) => { stderr += data.toString(); });
@@ -410,16 +444,21 @@ export function updatePluginFromGit(name) {
       // Re-run npm install if package.json exists
       const packageJsonPath = path.join(pluginDir, 'package.json');
       if (fs.existsSync(packageJsonPath)) {
-        const npmProcess = spawn('npm', ['install', '--ignore-scripts'], {
+        const npmSpawnOptions = {
           cwd: pluginDir,
           stdio: ['ignore', 'pipe', 'pipe'],
-          env: { ...process.env, HOME: getCurrentUserHomeDir() || process.env.HOME || os.homedir() },
-        });
+          env: { ...process.env, HOME: getCurrentUserHomeDir() || process.env.HOME },
+        };
+        if (typeof uid === 'number' && typeof gid === 'number') {
+          npmSpawnOptions.uid = uid;
+          npmSpawnOptions.gid = gid;
+        }
+        const npmProcess = spawn('npm', ['install', '--ignore-scripts'], npmSpawnOptions);
         npmProcess.on('close', (npmCode) => {
           if (npmCode !== 0) {
             return reject(new Error(`npm install for ${name} failed (exit code ${npmCode})`));
           }
-          runBuildIfNeeded(pluginDir, packageJsonPath, () => resolve(manifest), (err) => reject(err));
+          runBuildIfNeeded(pluginDir, packageJsonPath, () => resolve(manifest), (err) => reject(err), uid, gid, getCurrentUserHomeDir());
         });
         npmProcess.on('error', (err) => reject(err));
       } else {

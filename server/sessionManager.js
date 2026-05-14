@@ -4,28 +4,43 @@ import { getCurrentUserHomeDir } from './claude-sdk.js';
 
 class SessionManager {
   constructor() {
-    // Store sessions in memory with conversation history
-    this.sessions = new Map();
-    this.maxSessions = 100;
-    this.sessionsDir = path.join(getCurrentUserHomeDir(), '.gemini', 'sessions');
-    this.ready = this.init();
+    this.userSessions = new Map();
+    this.maxSessionsPerUser = 100;
   }
 
-  async init() {
-    await this.initSessionsDir();
-    await this.loadSessions();
-  }
-
-  async initSessionsDir() {
-    try {
-      await fs.mkdir(this.sessionsDir, { recursive: true });
-    } catch (error) {
-      // console.error('Error creating sessions directory:', error);
+  _getSessionsDir() {
+    const homeDir = getCurrentUserHomeDir();
+    if (!homeDir) {
+      throw new Error('No user home directory available in request context');
     }
+    return path.join(homeDir, '.gemini', 'sessions');
   }
 
-  // Create a new session
-  createSession(sessionId, projectPath) {
+  _getUserSessions() {
+    const homeDir = getCurrentUserHomeDir();
+    if (!homeDir) {
+      throw new Error('No user home directory available in request context');
+    }
+    
+    if (!this.userSessions.has(homeDir)) {
+      this.userSessions.set(homeDir, new Map());
+    }
+    return this.userSessions.get(homeDir);
+  }
+
+  async _ensureSessionsDir() {
+    const sessionsDir = this._getSessionsDir();
+    try {
+      await fs.mkdir(sessionsDir, { recursive: true });
+    } catch (error) {
+      // Ignore if already exists
+    }
+    return sessionsDir;
+  }
+
+  async createSession(sessionId, projectPath) {
+    const sessions = this._getUserSessions();
+    
     const session = {
       id: sessionId,
       projectPath: projectPath,
@@ -34,29 +49,34 @@ class SessionManager {
       lastActivity: new Date()
     };
 
-    // Evict oldest session from memory if we exceed limit
-    if (this.sessions.size >= this.maxSessions) {
-      const oldestKey = this.sessions.keys().next().value;
-      if (oldestKey) this.sessions.delete(oldestKey);
+    if (sessions.size >= this.maxSessionsPerUser) {
+      const oldestKey = sessions.keys().next().value;
+      if (oldestKey) sessions.delete(oldestKey);
     }
 
-    this.sessions.set(sessionId, session);
-    this.saveSession(sessionId);
+    sessions.set(sessionId, session);
+    await this.saveSession(sessionId);
 
     return session;
   }
 
-  // Add a message to session
   addMessage(sessionId, role, content) {
-    let session = this.sessions.get(sessionId);
+    const sessions = this._getUserSessions();
+    let session = sessions.get(sessionId);
 
     if (!session) {
-      // Create session if it doesn't exist
-      session = this.createSession(sessionId, '');
+      session = {
+        id: sessionId,
+        projectPath: '',
+        messages: [],
+        createdAt: new Date(),
+        lastActivity: new Date()
+      };
+      sessions.set(sessionId, session);
     }
 
     const message = {
-      role: role, // 'user' or 'assistant'
+      role: role,
       content: content,
       timestamp: new Date()
     };
@@ -69,18 +89,18 @@ class SessionManager {
     return session;
   }
 
-  // Get session by ID
   getSession(sessionId) {
-    return this.sessions.get(sessionId);
+    const sessions = this._getUserSessions();
+    return sessions.get(sessionId);
   }
 
-  // Get all sessions for a project
   getProjectSessions(projectPath) {
-    const sessions = [];
+    const sessions = this._getUserSessions();
+    const result = [];
 
-    for (const [id, session] of this.sessions) {
+    for (const [id, session] of sessions) {
       if (session.projectPath === projectPath) {
-        sessions.push({
+        result.push({
           id: session.id,
           summary: this.getSessionSummary(session),
           messageCount: session.messages.length,
@@ -89,18 +109,16 @@ class SessionManager {
       }
     }
 
-    return sessions.sort((a, b) =>
+    return result.sort((a, b) =>
       new Date(b.lastActivity) - new Date(a.lastActivity)
     );
   }
 
-  // Get session summary
   getSessionSummary(session) {
     if (session.messages.length === 0) {
       return 'New Session';
     }
 
-    // Find first user message
     const firstUserMessage = session.messages.find(m => m.role === 'user');
     if (firstUserMessage) {
       const content = firstUserMessage.content;
@@ -110,15 +128,14 @@ class SessionManager {
     return 'New Session';
   }
 
-  // Build conversation context for Gemini
   buildConversationContext(sessionId, maxMessages = 10) {
-    const session = this.sessions.get(sessionId);
+    const sessions = this._getUserSessions();
+    const session = sessions.get(sessionId);
 
     if (!session || session.messages.length === 0) {
       return '';
     }
 
-    // Get last N messages for context
     const recentMessages = session.messages.slice(-maxMessages);
 
     let context = 'Here is the conversation history:\n\n';
@@ -136,18 +153,18 @@ class SessionManager {
     return context;
   }
 
-  // Prevent path traversal
   _safeFilePath(sessionId) {
     const safeId = String(sessionId).replace(/[/\\]|\.\./g, '');
-    return path.join(this.sessionsDir, `${safeId}.json`);
+    return path.join(this._getSessionsDir(), `${safeId}.json`);
   }
 
-  // Save session to disk
   async saveSession(sessionId) {
-    const session = this.sessions.get(sessionId);
+    const sessions = this._getUserSessions();
+    const session = sessions.get(sessionId);
     if (!session) return;
 
     try {
+      await this._ensureSessionsDir();
       const filePath = this._safeFilePath(sessionId);
       await fs.writeFile(filePath, JSON.stringify(session, null, 2));
     } catch (error) {
@@ -155,45 +172,33 @@ class SessionManager {
     }
   }
 
-  // Load sessions from disk
-  async loadSessions() {
+  async loadSession(sessionId) {
+    const sessions = this._getUserSessions();
+    if (sessions.has(sessionId)) {
+      return sessions.get(sessionId);
+    }
+
     try {
-      const files = await fs.readdir(this.sessionsDir);
+      const filePath = this._safeFilePath(sessionId);
+      const data = await fs.readFile(filePath, 'utf8');
+      const session = JSON.parse(data);
 
-      for (const file of files) {
-        if (file.endsWith('.json')) {
-          try {
-            const filePath = path.join(this.sessionsDir, file);
-            const data = await fs.readFile(filePath, 'utf8');
-            const session = JSON.parse(data);
+      session.createdAt = new Date(session.createdAt);
+      session.lastActivity = new Date(session.lastActivity);
+      session.messages.forEach(msg => {
+        msg.timestamp = new Date(msg.timestamp);
+      });
 
-            // Convert dates
-            session.createdAt = new Date(session.createdAt);
-            session.lastActivity = new Date(session.lastActivity);
-            session.messages.forEach(msg => {
-              msg.timestamp = new Date(msg.timestamp);
-            });
-
-            this.sessions.set(session.id, session);
-          } catch (error) {
-            // console.error(`Error loading session ${file}:`, error);
-          }
-        }
-      }
-
-      // Enforce eviction after loading to prevent massive memory usage
-      while (this.sessions.size > this.maxSessions) {
-        const oldestKey = this.sessions.keys().next().value;
-        if (oldestKey) this.sessions.delete(oldestKey);
-      }
+      sessions.set(session.id, session);
+      return session;
     } catch (error) {
-      // console.error('Error loading sessions:', error);
+      return null;
     }
   }
 
-  // Delete a session
   async deleteSession(sessionId) {
-    this.sessions.delete(sessionId);
+    const sessions = this._getUserSessions();
+    sessions.delete(sessionId);
 
     try {
       const filePath = this._safeFilePath(sessionId);
@@ -203,9 +208,9 @@ class SessionManager {
     }
   }
 
-  // Get session messages for display
   getSessionMessages(sessionId) {
-    const session = this.sessions.get(sessionId);
+    const sessions = this._getUserSessions();
+    const session = sessions.get(sessionId);
     if (!session) return [];
 
     return session.messages.map(msg => ({
@@ -219,8 +224,6 @@ class SessionManager {
   }
 }
 
-// Singleton instance
 const sessionManager = new SessionManager();
 
-export const ready = sessionManager.ready;
 export default sessionManager;

@@ -67,13 +67,18 @@ const validateExternalApiKey = (req, res, next) => {
  * @param {string} repoPath - Path to the git repository
  * @returns {Promise<string>} - Remote URL of the repository
  */
-async function getGitRemoteUrl(repoPath) {
+async function getGitRemoteUrl(repoPath, uid, gid) {
   return new Promise((resolve, reject) => {
-    const gitProcess = spawn('git', ['config', '--get', 'remote.origin.url'], {
+    const spawnOptions = {
       cwd: repoPath,
       stdio: ['pipe', 'pipe', 'pipe'],
-      env: { ...process.env, HOME: getCurrentUserHomeDir() || process.env.HOME || os.homedir() }
-    });
+      env: { ...process.env, HOME: getCurrentUserHomeDir() || process.env.HOME }
+    };
+    if (typeof uid === 'number' && typeof gid === 'number') {
+      spawnOptions.uid = uid;
+      spawnOptions.gid = gid;
+    }
+    const gitProcess = spawn('git', ['config', '--get', 'remote.origin.url'], spawnOptions);
 
     let stdout = '';
     let stderr = '';
@@ -226,13 +231,18 @@ function validateBranchName(branchName) {
  * @param {number} limit - Number of commits to retrieve (default: 5)
  * @returns {Promise<string[]>} - Array of commit messages
  */
-async function getCommitMessages(projectPath, limit = 5) {
+async function getCommitMessages(projectPath, limit = 5, uid, gid) {
   return new Promise((resolve, reject) => {
-    const gitProcess = spawn('git', ['log', `-${limit}`, '--pretty=format:%s'], {
+    const spawnOptions = {
       cwd: projectPath,
       stdio: ['pipe', 'pipe', 'pipe'],
-      env: { ...process.env, HOME: getCurrentUserHomeDir() || process.env.HOME || os.homedir() }
-    });
+      env: { ...process.env, HOME: getCurrentUserHomeDir() || process.env.HOME }
+    };
+    if (typeof uid === 'number' && typeof gid === 'number') {
+      spawnOptions.uid = uid;
+      spawnOptions.gid = gid;
+    }
+    const gitProcess = spawn('git', ['log', `-${limit}`, '--pretty=format:%s'], spawnOptions);
 
     let stdout = '';
     let stderr = '';
@@ -334,22 +344,19 @@ async function createGitHubPR(octokit, owner, repo, branchName, title, body, bas
  * @param {string} projectPath - Path for cloning the repository
  * @returns {Promise<string>} - Path to the cloned repository
  */
-async function cloneGitHubRepo(githubUrl, githubToken = null, projectPath) {
+async function cloneGitHubRepo(githubUrl, githubToken = null, projectPath, uid, gid) {
   return new Promise(async (resolve, reject) => {
     try {
-      // Validate GitHub URL
       if (!githubUrl || !githubUrl.includes('github.com')) {
         throw new Error('Invalid GitHub URL');
       }
 
       const cloneDir = path.resolve(projectPath);
 
-      // Check if directory already exists
       try {
         await fs.access(cloneDir);
-        // Directory exists - check if it's a git repo with the same URL
         try {
-          const existingUrl = await getGitRemoteUrl(cloneDir);
+          const existingUrl = await getGitRemoteUrl(cloneDir, uid, gid);
           const normalizedExisting = normalizeGitHubUrl(existingUrl);
           const normalizedRequested = normalizeGitHubUrl(githubUrl);
 
@@ -363,33 +370,31 @@ async function cloneGitHubRepo(githubUrl, githubToken = null, projectPath) {
           throw new Error(`Directory ${cloneDir} already exists but is not a valid git repository or git command failed`);
         }
       } catch (accessError) {
-        // Directory doesn't exist - proceed with clone
       }
 
-      // Ensure parent directory exists
-      const userIdentity = getUserIdentity(req);
-      if (userIdentity) {
-        await mkdirAsUser(path.dirname(cloneDir), userIdentity.uid, userIdentity.gid, { recursive: true });
+      if (typeof uid === 'number' && typeof gid === 'number') {
+        await mkdirAsUser(path.dirname(cloneDir), uid, gid, { recursive: true });
       } else {
         await fs.mkdir(path.dirname(cloneDir), { recursive: true });
       }
 
-      // Prepare the git clone URL with authentication if token is provided
       let cloneUrl = githubUrl;
       if (githubToken) {
-        // Convert HTTPS URL to authenticated URL
-        // Example: https://github.com/user/repo -> https://token@github.com/user/repo
         cloneUrl = githubUrl.replace('https://github.com', `https://${githubToken}@github.com`);
       }
 
       console.log('🔄 Cloning repository:', githubUrl);
       console.log('📁 Destination:', cloneDir);
 
-      // Execute git clone
-      const gitProcess = spawn('git', ['clone', '--depth', '1', cloneUrl, cloneDir], {
+      const spawnOptions = {
         stdio: ['pipe', 'pipe', 'pipe'],
-        env: { ...process.env, HOME: getCurrentUserHomeDir() || process.env.HOME || os.homedir() }
-      });
+        env: { ...process.env, HOME: getCurrentUserHomeDir() || process.env.HOME }
+      };
+      if (typeof uid === 'number' && typeof gid === 'number') {
+        spawnOptions.uid = uid;
+        spawnOptions.gid = gid;
+      }
+      const gitProcess = spawn('git', ['clone', '--depth', '1', cloneUrl, cloneDir], spawnOptions);
 
       let stdout = '';
       let stderr = '';
@@ -442,7 +447,12 @@ async function cleanupProject(projectPath, sessionId = null) {
     // Also clean up the Claude session directory if sessionId provided
     if (sessionId) {
       try {
-        const sessionPath = path.join(req.user?.home_dir || os.homedir(), '.claude', 'sessions', sessionId);
+        const userHomeDir = req.user?.home_dir;
+        if (!userHomeDir) {
+          console.error('⚠️ Cannot clean up session directory: no user home_dir');
+          return;
+        }
+        const sessionPath = path.join(userHomeDir, '.claude', 'sessions', sessionId);
         console.log('🧹 Cleaning up session directory:', sessionPath);
         await fs.rm(sessionPath, { recursive: true, force: true });
         console.log('✅ Session directory cleaned up');
@@ -891,12 +901,15 @@ router.post('/', validateExternalApiKey, async (req, res) => {
       if (projectPath) {
         targetPath = projectPath;
       } else {
-        // Generate a unique path for cloning
+        const userHomeDir = req.user?.home_dir;
+        if (!userHomeDir) {
+          throw new Error('Cannot determine user home directory for project clone');
+        }
         const repoHash = crypto.createHash('md5').update(githubUrl + Date.now()).digest('hex');
-        targetPath = path.join(req.user?.home_dir || os.homedir(), '.claude', 'external-projects', repoHash);
+        targetPath = path.join(userHomeDir, '.claude', 'external-projects', repoHash);
       }
 
-      finalProjectPath = await cloneGitHubRepo(githubUrl.trim(), tokenToUse, targetPath);
+      finalProjectPath = await cloneGitHubRepo(githubUrl.trim(), tokenToUse, targetPath, req.user?.uid, req.user?.gid);
     } else {
       // Use existing project path
       finalProjectPath = normalizeProjectPath(path.resolve(projectPath));
@@ -959,6 +972,8 @@ router.post('/', validateExternalApiKey, async (req, res) => {
         permissionMode: 'bypassPermissions', // Bypass all permissions for API calls
         userUid: req.user?.uid,
         userGid: req.user?.gid,
+        username: req.user?.username,
+        homeDir: req.user?.home_dir,
       }, writer);
 
     } else if (provider === 'cursor') {
@@ -969,7 +984,11 @@ router.post('/', validateExternalApiKey, async (req, res) => {
         cwd: finalProjectPath,
         sessionId: sessionId || null,
         model: model || undefined,
-        skipPermissions: true // Bypass permissions for Cursor
+        skipPermissions: true,
+        userUid: req.user?.uid,
+        userGid: req.user?.gid,
+        username: req.user?.username,
+        homeDir: req.user?.home_dir,
       }, writer);
     } else if (provider === 'codex') {
       console.log('🤖 Starting Codex SDK session');
@@ -979,7 +998,11 @@ router.post('/', validateExternalApiKey, async (req, res) => {
         cwd: finalProjectPath,
         sessionId: sessionId || null,
         model: model || CODEX_MODELS.DEFAULT,
-        permissionMode: 'bypassPermissions'
+        permissionMode: 'bypassPermissions',
+        userUid: req.user?.uid,
+        userGid: req.user?.gid,
+        username: req.user?.username,
+        homeDir: req.user?.home_dir,
       }, writer);
     } else if (provider === 'gemini') {
       console.log('✨ Starting Gemini CLI session');
@@ -989,7 +1012,11 @@ router.post('/', validateExternalApiKey, async (req, res) => {
         cwd: finalProjectPath,
         sessionId: sessionId || null,
         model: model,
-        skipPermissions: true // CLI mode bypasses permissions
+        skipPermissions: true,
+        userUid: req.user?.uid,
+        userGid: req.user?.gid,
+        username: req.user?.username,
+        homeDir: req.user?.home_dir,
       }, writer);
     }
 
@@ -1016,7 +1043,7 @@ router.post('/', validateExternalApiKey, async (req, res) => {
         if (!repoUrl) {
           console.log('🔍 Getting GitHub URL from git remote...');
           try {
-            repoUrl = await getGitRemoteUrl(finalProjectPath);
+            repoUrl = await getGitRemoteUrl(finalProjectPath, req.user?.uid, req.user?.gid);
             if (!repoUrl.includes('github.com')) {
               throw new Error('Project does not have a GitHub remote configured');
             }
@@ -1045,13 +1072,20 @@ router.post('/', validateExternalApiKey, async (req, res) => {
         }
 
         if (createBranch) {
-          // Create and checkout the new branch locally
-          console.log('🔄 Creating local branch...');
-          const checkoutProcess = spawn('git', ['checkout', '-b', finalBranchName], {
+          const userUid = req.user?.uid;
+          const userGid = req.user?.gid;
+          const gitSpawnOptions = {
             cwd: finalProjectPath,
             stdio: 'pipe',
-            env: { ...process.env, HOME: getCurrentUserHomeDir() || process.env.HOME || os.homedir() }
-          });
+            env: { ...process.env, HOME: getCurrentUserHomeDir() || process.env.HOME }
+          };
+          if (typeof userUid === 'number' && typeof userGid === 'number') {
+            gitSpawnOptions.uid = userUid;
+            gitSpawnOptions.gid = userGid;
+          }
+
+          console.log('🔄 Creating local branch...');
+          const checkoutProcess = spawn('git', ['checkout', '-b', finalBranchName], gitSpawnOptions);
 
           await new Promise((resolve, reject) => {
             let stderr = '';
@@ -1061,14 +1095,9 @@ router.post('/', validateExternalApiKey, async (req, res) => {
                 console.log(`✅ Created and checked out local branch '${finalBranchName}'`);
                 resolve();
               } else {
-                // Branch might already exist locally, try to checkout
                 if (stderr.includes('already exists')) {
                   console.log(`ℹ️ Branch '${finalBranchName}' already exists locally, checking out...`);
-                  const checkoutExisting = spawn('git', ['checkout', finalBranchName], {
-                    cwd: finalProjectPath,
-                    stdio: 'pipe',
-                    env: { ...process.env, HOME: getCurrentUserHomeDir() || process.env.HOME || os.homedir() }
-                  });
+                  const checkoutExisting = spawn('git', ['checkout', finalBranchName], gitSpawnOptions);
                   checkoutExisting.on('close', (checkoutCode) => {
                     if (checkoutCode === 0) {
                       console.log(`✅ Checked out existing branch '${finalBranchName}'`);
@@ -1084,13 +1113,8 @@ router.post('/', validateExternalApiKey, async (req, res) => {
             });
           });
 
-          // Push the branch to remote
           console.log('🔄 Pushing branch to remote...');
-          const pushProcess = spawn('git', ['push', '-u', 'origin', finalBranchName], {
-            cwd: finalProjectPath,
-            stdio: 'pipe',
-            env: { ...process.env, HOME: getCurrentUserHomeDir() || process.env.HOME || os.homedir() }
-          });
+          const pushProcess = spawn('git', ['push', '-u', 'origin', finalBranchName], gitSpawnOptions);
 
           await new Promise((resolve, reject) => {
             let stderr = '';
@@ -1122,7 +1146,7 @@ router.post('/', validateExternalApiKey, async (req, res) => {
         if (createPR) {
           // Get commit messages to generate PR description
           console.log('🔄 Generating PR title and description...');
-          const commitMessages = await getCommitMessages(finalProjectPath, 5);
+          const commitMessages = await getCommitMessages(finalProjectPath, 5, req.user?.uid, req.user?.gid);
 
           // Use the first commit message as the PR title, or fallback to the agent message
           const prTitle = commitMessages.length > 0 ? commitMessages[0] : message;

@@ -36,8 +36,10 @@ export interface IProviderAuth {
   /**
    * Checks whether the provider is installed and has usable credentials.
    * @param homeDir - Override the home directory (for PAM multi-user support)
+   * @param uid - User ID for process ownership (for PAM multi-user support)
+   * @param gid - Group ID for process ownership (for PAM multi-user support)
    */
-  getStatus(homeDir?: string): Promise<ProviderAuthStatus>;
+  getStatus(homeDir?: string, uid?: number, gid?: number): Promise<ProviderAuthStatus>;
 }
 
 // ---------------------------

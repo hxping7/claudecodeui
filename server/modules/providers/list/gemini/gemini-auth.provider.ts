@@ -32,7 +32,7 @@ export class GeminiProviderAuth implements IProviderAuth {
   /**
    * Returns Gemini CLI installation and credential status.
    */
-  async getStatus(homeDir?: string): Promise<ProviderAuthStatus> {
+  async getStatus(homeDir?: string, _uid?: number, _gid?: number): Promise<ProviderAuthStatus> {
     const installed = this.checkInstalled();
 
     if (!installed) {

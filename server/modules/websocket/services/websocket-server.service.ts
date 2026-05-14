@@ -2,6 +2,7 @@ import type { Server as HttpServer } from 'node:http';
 
 import { WebSocketServer, type VerifyClientCallbackSync } from 'ws';
 
+import { runInRequestContext } from '@/requestContext.js';
 import { handleChatConnection } from '@/modules/websocket/services/chat-websocket.service.js';
 import { verifyWebSocketClient } from '@/modules/websocket/services/websocket-auth.service.js';
 import { handlePluginWsProxy } from '@/modules/websocket/services/plugin-websocket-proxy.service.js';
@@ -32,26 +33,35 @@ export function createWebSocketServer(
 
   wss.on('connection', (ws, request) => {
     const incomingRequest = request as AuthenticatedWebSocketRequest;
+    const user = incomingRequest.user as { home_dir?: string; uid?: number; gid?: number } | undefined;
+    const store = {
+      homeDir: user?.home_dir || null,
+      uid: typeof user?.uid === 'number' ? user.uid : undefined,
+      gid: typeof user?.gid === 'number' ? user.gid : undefined,
+    };
+
     const url = incomingRequest.url ?? '/';
     const pathname = new URL(url, 'http://localhost').pathname;
 
-    if (pathname === '/shell') {
-      handleShellConnection(ws, incomingRequest, dependencies.shell);
-      return;
-    }
+    runInRequestContext(store, () => {
+      if (pathname === '/shell') {
+        handleShellConnection(ws, incomingRequest, dependencies.shell);
+        return;
+      }
 
-    if (pathname === '/ws') {
-      handleChatConnection(ws, incomingRequest, dependencies.chat);
-      return;
-    }
+      if (pathname === '/ws') {
+        handleChatConnection(ws, incomingRequest, dependencies.chat);
+        return;
+      }
 
-    if (pathname.startsWith('/plugin-ws/')) {
-      handlePluginWsProxy(ws, pathname, dependencies.getPluginPort);
-      return;
-    }
+      if (pathname.startsWith('/plugin-ws/')) {
+        handlePluginWsProxy(ws, pathname, dependencies.getPluginPort);
+        return;
+      }
 
-    console.log('[WARN] Unknown WebSocket path:', pathname);
-    ws.close();
+      console.log('[WARN] Unknown WebSocket path:', pathname);
+      ws.close();
+    });
   });
 
   return wss;

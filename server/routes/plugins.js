@@ -23,6 +23,12 @@ import {
 
 const router = express.Router();
 
+function getUserIdentity(req) {
+  const uid = typeof req?.user?.uid === 'number' ? req.user.uid : undefined;
+  const gid = typeof req?.user?.gid === 'number' ? req.user.gid : undefined;
+  return { uid, gid };
+}
+
 // GET / — List all installed plugins (includes server running status)
 router.get('/', (req, res) => {
   try {
@@ -120,7 +126,8 @@ router.put('/:name/enable', async (req, res) => {
         const pluginDir = getPluginDir(plugin.name);
         if (pluginDir) {
           try {
-            await startPluginServer(plugin.name, pluginDir, plugin.server);
+            const { uid, gid } = getUserIdentity(req);
+            await startPluginServer(plugin.name, pluginDir, plugin.server, uid, gid);
           } catch (err) {
             console.error(`[Plugins] Failed to start server for "${plugin.name}":`, err.message);
           }
@@ -149,14 +156,15 @@ router.post('/install', async (req, res) => {
       return res.status(400).json({ error: 'URL must start with https:// or git@' });
     }
 
-    const manifest = await installPluginFromGit(url);
+    const { uid, gid } = getUserIdentity(req);
+    const manifest = await installPluginFromGit(url, uid, gid);
 
     // Auto-start the server if the plugin has one (enabled by default)
     if (manifest.server) {
       const pluginDir = getPluginDir(manifest.name);
       if (pluginDir) {
         try {
-          await startPluginServer(manifest.name, pluginDir, manifest.server);
+          await startPluginServer(manifest.name, pluginDir, manifest.server, uid, gid);
         } catch (err) {
           console.error(`[Plugins] Failed to start server for "${manifest.name}":`, err.message);
         }
@@ -183,14 +191,15 @@ router.post('/:name/update', async (req, res) => {
       await stopPluginServer(pluginName);
     }
 
-    const manifest = await updatePluginFromGit(pluginName);
+    const { uid, gid } = getUserIdentity(req);
+    const manifest = await updatePluginFromGit(pluginName, uid, gid);
 
     // Restart server if it was running before the update
     if (wasRunning && manifest.server) {
       const pluginDir = getPluginDir(pluginName);
       if (pluginDir) {
         try {
-          await startPluginServer(pluginName, pluginDir, manifest.server);
+          await startPluginServer(pluginName, pluginDir, manifest.server, uid, gid);
         } catch (err) {
           console.error(`[Plugins] Failed to restart server for "${pluginName}":`, err.message);
         }
@@ -225,7 +234,8 @@ router.all('/:name/rpc/*', async (req, res) => {
     }
     const pluginDir = path.join(getPluginsDir(), plugin.dirName);
     try {
-      port = await startPluginServer(pluginName, pluginDir, plugin.server);
+      const { uid, gid } = getUserIdentity(req);
+      port = await startPluginServer(pluginName, pluginDir, plugin.server, uid, gid);
     } catch (err) {
       return res.status(503).json({ error: 'Plugin server failed to start', details: err.message });
     }

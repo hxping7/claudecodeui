@@ -41,14 +41,19 @@ const router = express.Router();
  * Check if TaskMaster CLI is installed globally
  * @returns {Promise<Object>} Installation status result
  */
-async function checkTaskMasterInstallation() {
+async function checkTaskMasterInstallation(uid, gid) {
     return new Promise((resolve) => {
         // Check if task-master command is available
-        const child = spawn('which', ['task-master'], { 
+        const whichOptions = { 
             stdio: ['ignore', 'pipe', 'pipe'],
             shell: true,
-            env: { ...process.env, HOME: getCurrentUserHomeDir() || process.env.HOME || os.homedir() },
-        });
+            env: { ...process.env, HOME: getCurrentUserHomeDir() || process.env.HOME },
+        };
+        if (typeof uid === 'number' && typeof gid === 'number') {
+            whichOptions.uid = uid;
+            whichOptions.gid = gid;
+        }
+        const child = spawn('which', ['task-master'], whichOptions);
         
         let output = '';
         let errorOutput = '';
@@ -64,11 +69,16 @@ async function checkTaskMasterInstallation() {
         child.on('close', (code) => {
             if (code === 0 && output.trim()) {
                 // TaskMaster is installed, get version
-                const versionChild = spawn('task-master', ['--version'], { 
+                const versionOptions = { 
                     stdio: ['ignore', 'pipe', 'pipe'],
                     shell: true,
-                    env: { ...process.env, HOME: getCurrentUserHomeDir() || process.env.HOME || os.homedir() },
-                });
+                    env: { ...process.env, HOME: getCurrentUserHomeDir() || process.env.HOME },
+                };
+                if (typeof uid === 'number' && typeof gid === 'number') {
+                    versionOptions.uid = uid;
+                    versionOptions.gid = gid;
+                }
+                const versionChild = spawn('task-master', ['--version'], versionOptions);
                 
                 let versionOutput = '';
                 
@@ -122,7 +132,9 @@ async function checkTaskMasterInstallation() {
  */
 router.get('/installation-status', async (req, res) => {
     try {
-        const installationStatus = await checkTaskMasterInstallation();
+        const uid = typeof req?.user?.uid === 'number' ? req.user.uid : undefined;
+        const gid = typeof req?.user?.gid === 'number' ? req.user.gid : undefined;
+        const installationStatus = await checkTaskMasterInstallation(uid, gid);
         
         // Also check for MCP server configuration
         const mcpStatus = await detectTaskMasterMCPServer();
@@ -528,7 +540,9 @@ router.post('/init/:projectId', async (req, res) => {
         const initProcess = spawn('npx', ['task-master', 'init'], {
             cwd: projectPath,
             stdio: ['pipe', 'pipe', 'pipe'],
-            env: { ...process.env, HOME: getCurrentUserHomeDir() || process.env.HOME || os.homedir() },
+            env: { ...process.env, HOME: getCurrentUserHomeDir() || process.env.HOME },
+            uid: req.user?.uid,
+            gid: req.user?.gid,
         });
 
         let stdout = '';
@@ -631,7 +645,9 @@ router.post('/add-task/:projectId', async (req, res) => {
         const addTaskProcess = spawn('npx', args, {
             cwd: projectPath,
             stdio: ['pipe', 'pipe', 'pipe'],
-            env: { ...process.env, HOME: getCurrentUserHomeDir() || process.env.HOME || os.homedir() },
+            env: { ...process.env, HOME: getCurrentUserHomeDir() || process.env.HOME },
+            uid: req.user?.uid,
+            gid: req.user?.gid,
         });
 
         let stdout = '';
@@ -710,7 +726,9 @@ router.put('/update-task/:projectId/:taskId', async (req, res) => {
             const setStatusProcess = spawn('npx', ['task-master-ai', 'set-status', `--id=${taskId}`, `--status=${status}`], {
                 cwd: projectPath,
                 stdio: ['pipe', 'pipe', 'pipe'],
-                env: { ...process.env, HOME: getCurrentUserHomeDir() || process.env.HOME || os.homedir() },
+                env: { ...process.env, HOME: getCurrentUserHomeDir() || process.env.HOME },
+                uid: req.user?.uid,
+                gid: req.user?.gid,
             });
 
             let stdout = '';
@@ -763,7 +781,9 @@ router.put('/update-task/:projectId/:taskId', async (req, res) => {
             const updateProcess = spawn('npx', ['task-master-ai', 'update-task', `--id=${taskId}`, `--prompt=${prompt}`], {
                 cwd: projectPath,
                 stdio: ['pipe', 'pipe', 'pipe'],
-                env: { ...process.env, HOME: getCurrentUserHomeDir() || process.env.HOME || os.homedir() },
+                env: { ...process.env, HOME: getCurrentUserHomeDir() || process.env.HOME },
+                uid: req.user?.uid,
+                gid: req.user?.gid,
             });
 
             let stdout = '';
@@ -860,7 +880,9 @@ router.post('/parse-prd/:projectId', async (req, res) => {
         const parsePRDProcess = spawn('npx', args, {
             cwd: projectPath,
             stdio: ['pipe', 'pipe', 'pipe'],
-            env: { ...process.env, HOME: getCurrentUserHomeDir() || process.env.HOME || os.homedir() },
+            env: { ...process.env, HOME: getCurrentUserHomeDir() || process.env.HOME },
+            uid: req.user?.uid,
+            gid: req.user?.gid,
         });
 
         let stdout = '';

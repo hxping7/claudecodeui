@@ -6,13 +6,14 @@ import { getConnection } from '../modules/database/connection.js';
 import { generateToken, authenticateToken } from '../middleware/auth.js';
 import { getLinuxUserInfo, authenticateWithLinux } from '../modules/auth/linux-pam-auth.js';
 import { findAppRoot, getModuleDir } from '../utils/runtime-paths.js';
+import { SUPERADMIN_HOME_DIR } from '../constants/config.js';
 
 const router = express.Router();
 const db = getConnection();
 
 // Superadmin is a virtual user (not a Linux user). Its workspace is a dedicated directory
 // separate from all PAM users' home directories to avoid path conflicts.
-const SUPERADMIN_HOME_DIR = '/home/hxp/.cloudcli/superadmin-workspace';
+// Configured via SUPERADMIN_HOME_DIR env var; see constants/config.js.
 
 // Get current auth mode
 function getAuthMode() {
@@ -196,7 +197,10 @@ router.post('/login', async (req, res) => {
     }
 
     // Use existing home_dir from database; superadmin falls back to app source directory
-    const userHomeDir = user.home_dir || (user.role === 'superadmin' ? SUPERADMIN_HOME_DIR : os.homedir());
+    const userHomeDir = user.home_dir || (user.role === 'superadmin' ? SUPERADMIN_HOME_DIR : null);
+    if (!userHomeDir) {
+      return res.status(500).json({ error: 'User home directory not configured' });
+    }
 
     // Generate token with resolved home_dir
     const token = generateToken({ ...user, home_dir: userHomeDir });

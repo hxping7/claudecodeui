@@ -31,7 +31,7 @@ export class CodexProviderAuth implements IProviderAuth {
   /**
    * Returns Codex SDK availability and credential status.
    */
-  async getStatus(homeDir?: string): Promise<ProviderAuthStatus> {
+  async getStatus(homeDir?: string, _uid?: number, _gid?: number): Promise<ProviderAuthStatus> {
     const installed = this.checkInstalled();
     const credentials = await this.checkCredentials(homeDir);
 

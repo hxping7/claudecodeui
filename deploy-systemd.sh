@@ -32,7 +32,6 @@ fi
 UNIT_PATH="/etc/systemd/system/${SERVICE_NAME}.service"
 EXEC_START="${NODE_BIN} ${APP_DIR}/dist-server/server/index.js"
 
-DEFAULT_LEGACY_DB="/home/hxp/.cloudcli/auth.db"
 DEFAULT_SYSTEM_DB="${DATA_DIR}/auth.db"
 DATABASE_PATH="${DATABASE_PATH:-}"
 if [[ -z "$DATABASE_PATH" ]]; then

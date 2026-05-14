@@ -1,12 +1,12 @@
 import jwt from 'jsonwebtoken';
 import { userDb, appConfigDb } from '../modules/database/index.js';
-import { IS_PLATFORM } from '../constants/config.js';
-import { setCurrentUserHomeDir, clearCurrentUserHomeDir } from '../claude-sdk.js';
+import { IS_PLATFORM, SUPERADMIN_HOME_DIR } from '../constants/config.js';
+import { runInRequestContext } from '../requestContext.js';
 import { findAppRoot, getModuleDir } from '../utils/runtime-paths.js';
 
 // Superadmin is a virtual user — its workspace is a dedicated directory
 // separate from all PAM users' home directories to avoid path conflicts.
-const SUPERADMIN_HOME_DIR = '/home/hxp/.cloudcli/superadmin-workspace';
+// Configured via SUPERADMIN_HOME_DIR env var; see constants/config.js.
 
 // Use env var if set, otherwise auto-generate a unique secret per installation
 const JWT_SECRET = process.env.JWT_SECRET || appConfigDb.getOrCreateJwtSecret();
@@ -35,7 +35,13 @@ const authenticateToken = async (req, res, next) => {
         return res.status(500).json({ error: 'Platform mode: No user found in database' });
       }
       req.user = { ...user, role: user.role || 'user' };
-      return next();
+
+      const store = {
+        homeDir: user.home_dir || null,
+        uid: typeof user.uid === 'number' ? user.uid : undefined,
+        gid: typeof user.gid === 'number' ? user.gid : undefined,
+      };
+      return runInRequestContext(store, () => next());
     } catch (error) {
       console.error('Platform mode error:', error);
       return res.status(500).json({ error: 'Platform mode: Failed to fetch user' });
@@ -92,11 +98,13 @@ const authenticateToken = async (req, res, next) => {
     if (typeof decoded.gid === 'number') {
       req.user.gid = decoded.gid;
     }
-    if (homeDir) {
-      setCurrentUserHomeDir(homeDir);
-    }
 
-    next();
+    const store = {
+      homeDir: homeDir || null,
+      uid: typeof decoded.uid === 'number' ? decoded.uid : undefined,
+      gid: typeof decoded.gid === 'number' ? decoded.gid : undefined,
+    };
+    runInRequestContext(store, () => next());
   } catch (error) {
     console.error('Token verification error:', error);
     return res.status(403).json({ error: 'Invalid token' });
@@ -140,7 +148,13 @@ const authenticateWebSocket = (token) => {
     try {
       const user = userDb.getFirstUser();
       if (user) {
-        return { id: user.id, userId: user.id, username: user.username, role: user.role || 'user' };
+        return {
+          id: user.id,
+          userId: user.id,
+          username: user.username,
+          role: user.role || 'user',
+          home_dir: user.home_dir || null,
+        };
       }
       return null;
     } catch (error) {
@@ -168,9 +182,6 @@ const authenticateWebSocket = (token) => {
       homeDir = SUPERADMIN_HOME_DIR;
     } else {
       homeDir = decoded.home_dir || user.home_dir || null;
-    }
-    if (homeDir) {
-      setCurrentUserHomeDir(homeDir);
     }
 
     const uid = typeof decoded.uid === 'number' ? decoded.uid : undefined;
