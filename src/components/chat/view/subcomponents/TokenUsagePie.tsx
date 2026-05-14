@@ -1,9 +1,11 @@
 type TokenUsagePieProps = {
   used: number;
   total: number;
+  provider?: string;
+  onDoubleClick?: () => void;
 };
 
-export default function TokenUsagePie({ used, total }: TokenUsagePieProps) {
+export default function TokenUsagePie({ used, total, provider, onDoubleClick }: TokenUsagePieProps) {
   // Token usage visualization component
   // Only bail out on missing values or non‐positive totals; allow used===0 to render 0%
   if (used == null || total == null || total <= 0) return null;
@@ -20,8 +22,21 @@ export default function TokenUsagePie({ used, total }: TokenUsagePieProps) {
     return '#ef4444'; // red
   };
 
+  // Get tooltip text based on provider
+  const getTooltipText = () => {
+    const baseText = `${used.toLocaleString()} / ${total.toLocaleString()} tokens (${percentage.toFixed(1)}%)`;
+    if (provider === 'claude') {
+      return `${baseText} — Double-click to compact context`;
+    }
+    return baseText;
+  };
+
   return (
-    <div className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400">
+    <div 
+      className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400 cursor-pointer hover:text-gray-800 dark:hover:text-gray-200 transition-colors"
+      onDoubleClick={onDoubleClick}
+      title={getTooltipText()}
+    >
       <svg width="24" height="24" viewBox="0 0 24 24" className="-rotate-90 transform">
         {/* Background circle */}
         <circle
@@ -46,7 +61,7 @@ export default function TokenUsagePie({ used, total }: TokenUsagePieProps) {
           strokeLinecap="round"
         />
       </svg>
-      <span title={`${used.toLocaleString()} / ${total.toLocaleString()} tokens`}>
+      <span>
         {percentage.toFixed(1)}%
       </span>
     </div>

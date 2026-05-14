@@ -503,6 +503,7 @@ function ChatInterface({
           messageQueue={messageQueue}
           onQueueMessage={handleQueueMessage}
           onProcessQueueNow={handleProcessQueueNow}
+          submitWithContent={submitWithContent}
         />
       </div>
 

@@ -1,4 +1,5 @@
 import { useTranslation } from 'react-i18next';
+import { useCallback } from 'react';
 import type {
   ChangeEvent,
   ClipboardEvent,
@@ -112,6 +113,8 @@ interface ChatComposerProps {
   messageQueue: QueuedMessage[];
   onQueueMessage: (content: string, images: unknown[]) => void;
   onProcessQueueNow: () => void;
+  // Submit content directly
+  submitWithContent?: (content: string) => void;
 }
 
 export default function ChatComposer({
@@ -173,6 +176,7 @@ export default function ChatComposer({
   messageQueue = [],
   onQueueMessage,
   onProcessQueueNow,
+  submitWithContent,
 }: ChatComposerProps) {
   const { t } = useTranslation('chat');
   const textareaRect = textareaRef.current?.getBoundingClientRect();
@@ -189,6 +193,13 @@ export default function ChatComposer({
 
   // Hide the thinking/status bar while any permission request is pending
   const hasPendingPermissions = pendingPermissionRequests.length > 0;
+
+  // Handle double click on token usage pie to compact context
+  const handleTokenUsageDoubleClick = useCallback(() => {
+    if (provider === 'claude' && submitWithContent) {
+      submitWithContent('/compact');
+    }
+  }, [provider, submitWithContent]);
 
   return (
     <div className="flex-shrink-0 p-2 pb-2 sm:p-4 sm:pb-4 md:p-4 md:pb-6">
@@ -385,7 +396,12 @@ export default function ChatComposer({
               disabled={hasActiveSession}
             />
 
-            <TokenUsagePie used={tokenBudget?.used || 0} total={tokenBudget?.total || parseInt(import.meta.env.VITE_CONTEXT_WINDOW) || 160000} />
+            <TokenUsagePie 
+              used={tokenBudget?.used || 0} 
+              total={tokenBudget?.total || parseInt(import.meta.env.VITE_CONTEXT_WINDOW) || 160000}
+              provider={provider as string}
+              onDoubleClick={handleTokenUsageDoubleClick}
+            />
 
             <PromptInputButton
               tooltip={{ content: t('input.showAllCommands') }}
