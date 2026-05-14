@@ -877,15 +877,14 @@ app.post('/api/projects/:projectId/files/create', authenticateToken, async (req,
         const resolvedPath = validation.resolved;
         const userIdentity = getUserIdentity(req);
 
-        // Check if already exists
+        console.error('[files/create] projectId:', projectId, 'user:', req.user?.username, 'uid/gid:', userIdentity?.uid, userIdentity?.gid, 'type:', type, 'name:', name, 'parentPath:', parentPath);
+        console.error('[files/create] projectRoot:', projectRoot, 'resolvedPath:', resolvedPath);
+
+        // Check if already exists (existence check doesn't need user context)
         try {
-            if (userIdentity) {
-                const alreadyExists = await existsAsUser(resolvedPath, userIdentity.uid, userIdentity.gid);
-                if (alreadyExists) {
-                    return res.status(409).json({ error: `${type === 'file' ? 'File' : 'Directory'} already exists` });
-                }
-            } else {
-                await fsPromises.access(resolvedPath);
+            const alreadyExists = fs.existsSync(resolvedPath);
+            console.error('[files/create] existsSync result:', alreadyExists);
+            if (alreadyExists) {
                 return res.status(409).json({ error: `${type === 'file' ? 'File' : 'Directory'} already exists` });
             }
         } catch {
