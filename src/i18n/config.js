@@ -32,6 +32,7 @@ import koSidebar from './locales/ko/sidebar.json';
 import koChat from './locales/ko/chat.json';
 // eslint-disable-next-line import-x/order
 import koCodeEditor from './locales/ko/codeEditor.json';
+import koAdmin from './locales/ko/admin.json';
 
 import zhCommon from './locales/zh-CN/common.json';
 import zhSettings from './locales/zh-CN/settings.json';
@@ -50,6 +51,7 @@ import jaChat from './locales/ja/chat.json';
 import jaCodeEditor from './locales/ja/codeEditor.json';
 // eslint-disable-next-line import-x/order
 import jaTasks from './locales/ja/tasks.json';
+import jaAdmin from './locales/ja/admin.json';
 
 import ruCommon from './locales/ru/common.json';
 import ruSettings from './locales/ru/settings.json';
@@ -59,6 +61,7 @@ import ruChat from './locales/ru/chat.json';
 import ruCodeEditor from './locales/ru/codeEditor.json';
 // eslint-disable-next-line import-x/order
 import ruTasks from './locales/ru/tasks.json';
+import ruAdmin from './locales/ru/admin.json';
 
 import deCommon from './locales/de/common.json';
 import deSettings from './locales/de/settings.json';
@@ -68,6 +71,7 @@ import deChat from './locales/de/chat.json';
 import deCodeEditor from './locales/de/codeEditor.json';
 // eslint-disable-next-line import-x/order
 import deTasks from './locales/de/tasks.json';
+import deAdmin from './locales/de/admin.json';
 
 import trCommon from './locales/tr/common.json';
 import trSettings from './locales/tr/settings.json';
@@ -77,6 +81,7 @@ import trChat from './locales/tr/chat.json';
 import trCodeEditor from './locales/tr/codeEditor.json';
 // eslint-disable-next-line import-x/order
 import trTasks from './locales/tr/tasks.json';
+import trAdmin from './locales/tr/admin.json';
 import itCommon from './locales/it/common.json';
 import itSettings from './locales/it/settings.json';
 import itAuth from './locales/it/auth.json';
@@ -85,6 +90,7 @@ import itChat from './locales/it/chat.json';
 import itCodeEditor from './locales/it/codeEditor.json';
 // eslint-disable-next-line import-x/order
 import itTasks from './locales/it/tasks.json';
+import itAdmin from './locales/it/admin.json';
 
 // Import supported languages configuration
 import { languages } from './languages.js';
@@ -127,6 +133,7 @@ i18n
         sidebar: koSidebar,
         chat: koChat,
         codeEditor: koCodeEditor,
+        admin: koAdmin,
       },
       'zh-CN': {
         common: zhCommon,
@@ -145,6 +152,7 @@ i18n
         chat: jaChat,
         codeEditor: jaCodeEditor,
         tasks: jaTasks,
+        admin: jaAdmin,
       },
       ru: {
         common: ruCommon,
@@ -154,6 +162,7 @@ i18n
         chat: ruChat,
         codeEditor: ruCodeEditor,
         tasks: ruTasks,
+        admin: ruAdmin,
       },
       de: {
         common: deCommon,
@@ -163,6 +172,7 @@ i18n
         chat: deChat,
         codeEditor: deCodeEditor,
         tasks: deTasks,
+        admin: deAdmin,
       },
       tr: {
         common: trCommon,
@@ -172,6 +182,7 @@ i18n
         chat: trChat,
         codeEditor: trCodeEditor,
         tasks: trTasks,
+        admin: trAdmin,
       },
       it: {
         common: itCommon,
@@ -181,6 +192,7 @@ i18n
         chat: itChat,
         codeEditor: itCodeEditor,
         tasks: itTasks,
+        admin: itAdmin,
       },
     },
 

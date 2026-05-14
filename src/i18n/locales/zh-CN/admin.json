@@ -83,6 +83,9 @@
     "saving": "保存中...",
     "saved": "设置保存成功",
     "saveError": "保存设置失败",
-    "loadError": "加载设置失败"
+    "loadError": "加载设置失败",
+    "versionCheck": "版本检查",
+    "versionCheckDescription": "配置自动更新通知",
+    "disableVersionCheck": "禁用版本检查"
   }
 }
