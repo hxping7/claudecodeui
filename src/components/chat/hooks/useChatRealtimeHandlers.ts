@@ -243,6 +243,7 @@ export function useChatRealtimeHandlers({
           );
         }
         onNavigateToSession?.(newSessionId);
+        setTimeout(() => { void paletteOps.refreshProjects(); }, 300);
         break;
       }
 
