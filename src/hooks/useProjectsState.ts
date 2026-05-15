@@ -531,9 +531,7 @@ export function useProjectsState({
       (session) => session.id === selectedSession.id,
     );
 
-    if (!updatedSelectedSession) {
-      setSelectedSession(null);
-    }
+
   }, [latestMessage, selectedProject?.projectId, selectedSession?.id, activeSessions, projects]);
 
   useEffect(() => {

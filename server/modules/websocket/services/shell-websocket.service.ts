@@ -139,6 +139,16 @@ function buildShellCommand(
     return command;
   }
 
+  if (provider === 'tokenc') {
+    if (hasSession && sessionId) {
+      if (os.platform() === 'win32') {
+        return `tokenc --resume="${sessionId}"; if ($LASTEXITCODE -ne 0) { tokenc }`;
+      }
+      return `tokenc --resume="${sessionId}" || tokenc`;
+    }
+    return 'tokenc';
+  }
+
   const command = initialCommand || 'claude';
   if (hasSession && sessionId) {
     if (os.platform() === 'win32') {

@@ -475,7 +475,7 @@ export function useSessionStore() {
       slot.total = data.total ?? serverMessages.length;
       slot.hasMore = Boolean(data.hasMore);
       slot.fetchedAt = Date.now();
-      if (serverMessages.length > 0) {
+      if (serverMessages.length > 0 && serverMessages.length >= slot.realtimeMessages.length) {
         slot.realtimeMessages = [];
       }
       recomputeMergedIfNeeded(slot);
