@@ -15,6 +15,7 @@ const PROVIDER_SETTINGS_NAMES: Record<string, string> = {
   cursor: '~/.cursor/settings.json',
   codex: '~/.codex/settings.json',
   gemini: '~/.gemini/settings.json',
+  tokenc: '~/.tokencode/settings.json',
 };
 
 export default function UserAgentConfigContent({ agent }: UserAgentConfigContentProps) {

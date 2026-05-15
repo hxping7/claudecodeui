@@ -71,6 +71,10 @@ export class TokencProviderAuth implements IProviderAuth {
       return { authenticated: true, email: 'API Key Auth (Anthropic)', method: 'api_key' };
     }
 
+    if (process.env.ANTHROPIC_AUTH_TOKEN?.trim()) {
+      return { authenticated: true, email: 'API Key Auth (Anthropic Token)', method: 'api_key' };
+    }
+
     const settingsEnv = await this.loadSettingsEnv(homeDir);
     if (readOptionalString(settingsEnv.TOKENC_API_KEY)) {
       return { authenticated: true, email: 'API Key Auth', method: 'api_key' };
@@ -78,6 +82,10 @@ export class TokencProviderAuth implements IProviderAuth {
 
     if (readOptionalString(settingsEnv.ANTHROPIC_API_KEY)) {
       return { authenticated: true, email: 'API Key Auth (Anthropic)', method: 'api_key' };
+    }
+
+    if (readOptionalString(settingsEnv.ANTHROPIC_AUTH_TOKEN)) {
+      return { authenticated: true, email: 'API Key Auth (Anthropic Token)', method: 'api_key' };
     }
 
     try {

@@ -42,12 +42,14 @@ export function normalizedToChatMessages(messages: NormalizedMessage[]): ChatMes
               timestamp: msg.timestamp,
               isTaskNotification: true,
               taskStatus: taskNotifMatch[1]?.trim() || 'completed',
+              provider: msg.provider,
             });
           } else {
             converted.push({
               type: 'user',
               content: unescapeWithMathProtection(decodeHtmlEntities(content)),
               timestamp: msg.timestamp,
+              provider: msg.provider,
             });
           }
         } else {
@@ -58,6 +60,7 @@ export function normalizedToChatMessages(messages: NormalizedMessage[]): ChatMes
             type: 'assistant',
             content: text,
             timestamp: msg.timestamp,
+            provider: msg.provider,
           });
         }
         break;
@@ -106,6 +109,7 @@ export function normalizedToChatMessages(messages: NormalizedMessage[]): ChatMes
                 isComplete: Boolean(toolResult),
               }
             : undefined,
+          provider: msg.provider,
         });
         break;
       }
@@ -117,6 +121,7 @@ export function normalizedToChatMessages(messages: NormalizedMessage[]): ChatMes
             content: unescapeWithMathProtection(msg.content),
             timestamp: msg.timestamp,
             isThinking: true,
+            provider: msg.provider,
           });
         }
         break;
@@ -126,6 +131,7 @@ export function normalizedToChatMessages(messages: NormalizedMessage[]): ChatMes
           type: 'error',
           content: msg.content || 'Unknown error',
           timestamp: msg.timestamp,
+          provider: msg.provider,
         });
         break;
 
@@ -135,6 +141,7 @@ export function normalizedToChatMessages(messages: NormalizedMessage[]): ChatMes
           content: msg.content || '',
           timestamp: msg.timestamp,
           isInteractivePrompt: true,
+          provider: msg.provider,
         });
         break;
 
@@ -145,6 +152,7 @@ export function normalizedToChatMessages(messages: NormalizedMessage[]): ChatMes
           timestamp: msg.timestamp,
           isTaskNotification: true,
           taskStatus: msg.status || 'completed',
+          provider: msg.provider,
         });
         break;
 
@@ -155,6 +163,7 @@ export function normalizedToChatMessages(messages: NormalizedMessage[]): ChatMes
             content: msg.content,
             timestamp: msg.timestamp,
             isStreaming: true,
+            provider: msg.provider,
           });
         }
         break;

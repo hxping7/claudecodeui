@@ -28,6 +28,8 @@ export type AgentsSettingsTabProps = {
   onCodexPermissionModeChange: (value: CodexPermissionMode) => void;
   geminiPermissionMode: GeminiPermissionMode;
   onGeminiPermissionModeChange: (value: GeminiPermissionMode) => void;
+  tokencPermissions: ClaudePermissionsState;
+  onTokencPermissionsChange: (value: ClaudePermissionsState) => void;
   projects: SettingsProject[];
 };
 
@@ -55,5 +57,7 @@ export type AgentCategoryContentSectionProps = {
   onCodexPermissionModeChange: (value: CodexPermissionMode) => void;
   geminiPermissionMode: GeminiPermissionMode;
   onGeminiPermissionModeChange: (value: GeminiPermissionMode) => void;
+  tokencPermissions: ClaudePermissionsState;
+  onTokencPermissionsChange: (value: ClaudePermissionsState) => void;
   projects: SettingsProject[];
 };

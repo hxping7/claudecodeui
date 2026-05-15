@@ -10,6 +10,8 @@ import { getCurrentUserHomeDir } from './claude-sdk.js';
 const spawnFunction = process.platform === 'win32' ? crossSpawn : spawn;
 
 let activeTokencProcesses = new Map();
+let activeTokencWriters = new Map();
+let pendingPermissionRequests = new Map();
 
 const WORKSPACE_TRUST_PATTERNS = [
   /workspace trust required/i,
@@ -28,7 +30,7 @@ function isWorkspaceTrustPrompt(text = '') {
 
 async function spawnTokenc(command, options = {}, ws) {
   return new Promise(async (resolve, reject) => {
-    const { sessionId, projectPath, cwd, resume, toolsSettings, skipPermissions, model, sessionSummary } = options;
+    const { sessionId, projectPath, cwd, resume, toolsSettings, skipPermissions, permissionMode, model, sessionSummary } = options;
     let capturedSessionId = sessionId;
     let sessionCreatedSent = false;
     let hasRetriedWithTrust = false;
@@ -53,11 +55,27 @@ async function spawnTokenc(command, options = {}, ws) {
       }
 
       baseArgs.push('--output-format', 'stream-json');
+      baseArgs.push('--verbose');
     }
 
-    if (skipPermissions || settings.skipPermissions) {
-      baseArgs.push('-f');
-      console.log('Using -f flag (skip permissions)');
+    if (permissionMode === 'bypassPermissions') {
+      baseArgs.push('--allow-dangerously-skip-permissions');
+      baseArgs.push('--dangerously-skip-permissions');
+      console.log('Using --dangerously-skip-permissions (bypassPermissions)');
+    } else if (permissionMode) {
+      const tokencModeMap = {
+        'default': 'default',
+        'auto': 'bypassCwd',
+        'plan': 'plan',
+        'acceptEdits': 'acceptEdits',
+      };
+      const mappedMode = tokencModeMap[permissionMode] || permissionMode;
+      baseArgs.push('--permission-mode', mappedMode);
+      console.log('Using permission mode:', mappedMode);
+    } else if (skipPermissions || settings.skipPermissions) {
+      baseArgs.push('--allow-dangerously-skip-permissions');
+      baseArgs.push('--dangerously-skip-permissions');
+      console.log('Using --dangerously-skip-permissions');
     }
 
     const workingDir = cwd || projectPath || process.cwd();
@@ -136,7 +154,7 @@ async function spawnTokenc(command, options = {}, ws) {
         return true;
       };
 
-      const processTokencOutputLine = (line) => {
+      const processTokencOutputLine = async (line) => {
         if (!line || !line.trim()) {
           return;
         }
@@ -161,10 +179,19 @@ async function spawnTokenc(command, options = {}, ws) {
                     ws.setSessionId(capturedSessionId);
                   }
 
+                  if (!activeTokencWriters.has(capturedSessionId)) {
+                    activeTokencWriters.set(capturedSessionId, ws);
+                  }
+
                   if (!sessionId && !sessionCreatedSent) {
                     sessionCreatedSent = true;
                     ws.send(createNormalizedMessage({ kind: 'session_created', newSessionId: capturedSessionId, model: response.model, cwd: response.cwd, sessionId: capturedSessionId, provider: 'tokenc' }));
                   }
+                }
+              } else if (response.subtype === 'status' || response.subtype === 'hook_started' || response.subtype === 'hook_progress' || response.subtype === 'hook_response') {
+                const statusText = response.text || response.subtype || '';
+                if (statusText) {
+                  ws.send(createNormalizedMessage({ kind: 'status', text: statusText, sessionId: capturedSessionId || sessionId || null, provider: 'tokenc' }));
                 }
               }
               break;
@@ -179,6 +206,86 @@ async function spawnTokenc(command, options = {}, ws) {
               }
               break;
 
+            case 'pending': {
+              const toolName = response.tool_name || response.toolUse?.name || '';
+              const toolInput = response.tool_use?.input || response.input || {};
+              const desc = toolName ? `${toolName}${toolInput.command ? ': ' + String(toolInput.command).slice(0, 80) : ''}` : '';
+              ws.send(createNormalizedMessage({
+                kind: 'status',
+                text: desc || 'processing',
+                sessionId: capturedSessionId || sessionId || null,
+                provider: 'tokenc',
+              }));
+              break;
+            }
+
+            case 'control_request': {
+              const requestId = response.request_id || response.request?.request_id || String(Date.now());
+              const req = response.request || {};
+              const toolName = req.tool_name || '';
+              const toolInput = req.input || {};
+
+              console.log('[Tokenc] control_request:', { requestId, toolName });
+
+              if (skipPermissions || settings.skipPermissions) {
+                tokencProcess.stdin.write(JSON.stringify({
+                  type: 'control_response',
+                  request_id: requestId,
+                  response: { subtype: 'success' },
+                }) + '\n');
+              } else {
+                ws.send(createNormalizedMessage({
+                  kind: 'permission_request',
+                  requestId,
+                  toolName,
+                  input: toolInput,
+                  sessionId: capturedSessionId || sessionId || null,
+                  provider: 'tokenc',
+                }));
+
+                const pendingRequests = pendingPermissionRequests.get(capturedSessionId || sessionId || processKey) || [];
+                const approvalPromise = new Promise((resolve) => {
+                  pendingRequests.push({ requestId, resolve, toolName });
+                });
+                pendingPermissionRequests.set(capturedSessionId || sessionId || processKey, pendingRequests);
+
+                try {
+                  const decision = await Promise.race([
+                    approvalPromise,
+                    new Promise((resolve) => setTimeout(() => resolve(null), 300000)),
+                  ]);
+
+                  if (decision && decision.allow) {
+                    tokencProcess.stdin.write(JSON.stringify({
+                      type: 'control_response',
+                      request_id: requestId,
+                      response: {
+                        subtype: 'success',
+                        allow: true,
+                        updatedInput: decision.updatedInput,
+                        message: decision.message,
+                        rememberEntry: decision.rememberEntry,
+                      },
+                    }) + '\n');
+                  } else {
+                    tokencProcess.stdin.write(JSON.stringify({
+                      type: 'control_response',
+                      request_id: requestId,
+                      response: { subtype: 'error', error: decision?.message || 'User denied' },
+                    }) + '\n');
+                  }
+                } catch (err) {
+                  console.error('[Tokenc] Permission response error:', err);
+                  tokencProcess.stdin.write(JSON.stringify({
+                    type: 'control_response',
+                    request_id: requestId,
+                    response: { subtype: 'error', error: 'Permission handling failed' },
+                  }) + '\n');
+                }
+              }
+              break;
+            }
+
             case 'result': {
               console.log('Tokenc session result:', response);
               const resultText = typeof response.result === 'string' ? response.result : '';
@@ -192,7 +299,15 @@ async function spawnTokenc(command, options = {}, ws) {
               break;
             }
 
+            case 'error': {
+              const errorMsg = response.error || response.message || JSON.stringify(response);
+              console.error('Tokenc error:', errorMsg);
+              ws.send(createNormalizedMessage({ kind: 'error', content: errorMsg, sessionId: capturedSessionId || sessionId || null, provider: 'tokenc' }));
+              break;
+            }
+
             default:
+              console.log('[Tokenc] Unhandled type:', response.type, response);
           }
         } catch (parseError) {
           console.log('Non-JSON response:', line);
@@ -227,7 +342,19 @@ async function spawnTokenc(command, options = {}, ws) {
           return;
         }
 
-        ws.send(createNormalizedMessage({ kind: 'error', content: stderrText, sessionId: capturedSessionId || sessionId || null, provider: 'tokenc' }));
+        const lines = stderrText.split('\n');
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed) continue;
+
+          if (trimmed.startsWith('[stdout-guard]')) {
+            const actualContent = trimmed.replace(/^\[stdout-guard\]\s*/, '');
+            console.log('[Tokenc] stdout-guard diverted:', actualContent.slice(0, 120));
+            continue;
+          }
+
+          ws.send(createNormalizedMessage({ kind: 'error', content: trimmed, sessionId: capturedSessionId || sessionId || null, provider: 'tokenc' }));
+        }
       });
 
       tokencProcess.on('close', async (code) => {
@@ -235,6 +362,7 @@ async function spawnTokenc(command, options = {}, ws) {
 
         const finalSessionId = capturedSessionId || sessionId || processKey;
         activeTokencProcesses.delete(finalSessionId);
+        activeTokencWriters.delete(finalSessionId);
 
         if (stdoutLineBuffer.trim()) {
           processTokencOutputLine(stdoutLineBuffer.trim());
@@ -268,6 +396,7 @@ async function spawnTokenc(command, options = {}, ws) {
 
         const finalSessionId = capturedSessionId || sessionId || processKey;
         activeTokencProcesses.delete(finalSessionId);
+        activeTokencWriters.delete(finalSessionId);
 
         const installed = await providerAuthService.isProviderInstalled('tokenc');
         const errorContent = !installed
@@ -293,9 +422,18 @@ function abortTokencSession(sessionId) {
     console.log(`Aborting Tokenc session: ${sessionId}`);
     process.kill('SIGTERM');
     activeTokencProcesses.delete(sessionId);
+    activeTokencWriters.delete(sessionId);
     return true;
   }
   return false;
+}
+
+function reconnectTokencSessionWriter(sessionId, newRawWs) {
+  const writer = activeTokencWriters.get(sessionId);
+  if (!writer?.updateWebSocket) return false;
+  writer.updateWebSocket(newRawWs);
+  console.log(`[RECONNECT] Tokenc Writer swapped for session ${sessionId}`);
+  return true;
 }
 
 function isTokencSessionActive(sessionId) {
@@ -306,9 +444,24 @@ function getActiveTokencSessions() {
   return Array.from(activeTokencProcesses.keys());
 }
 
+function resolveTokencPermission(sessionId, requestId, decision) {
+  const pendingList = pendingPermissionRequests.get(sessionId);
+  if (!pendingList) return false;
+
+  const idx = pendingList.findIndex(p => p.requestId === requestId);
+  if (idx === -1) return false;
+
+  const [item] = pendingList.splice(idx, 1);
+  item.resolve(decision);
+  console.log(`[Tokenc] Permission resolved: ${requestId} -> ${decision.allow ? 'allowed' : 'denied'}`);
+  return true;
+}
+
 export {
   spawnTokenc,
   abortTokencSession,
   isTokencSessionActive,
-  getActiveTokencSessions
+  getActiveTokencSessions,
+  reconnectTokencSessionWriter,
+  resolveTokencPermission
 };

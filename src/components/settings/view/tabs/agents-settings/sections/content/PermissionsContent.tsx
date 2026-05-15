@@ -683,7 +683,17 @@ function GeminiPermissions({ permissionMode, onPermissionModeChange }: Omit<Gemi
   );
 }
 
-type PermissionsContentProps = ClaudePermissionsProps | CursorPermissionsProps | CodexPermissionsProps | GeminiPermissionsProps;
+type TokencPermissionsProps = {
+  agent: 'tokenc';
+  skipPermissions: boolean;
+  onSkipPermissionsChange: (value: boolean) => void;
+  allowedTools: string[];
+  onAllowedToolsChange: (value: string[]) => void;
+  disallowedTools: string[];
+  onDisallowedToolsChange: (value: string[]) => void;
+};
+
+type PermissionsContentProps = ClaudePermissionsProps | CursorPermissionsProps | CodexPermissionsProps | GeminiPermissionsProps | TokencPermissionsProps;
 
 export default function PermissionsContent(props: PermissionsContentProps) {
   if (props.agent === 'claude') {
@@ -696,6 +706,10 @@ export default function PermissionsContent(props: PermissionsContentProps) {
 
   if (props.agent === 'gemini') {
     return <GeminiPermissions {...props} />;
+  }
+
+  if (props.agent === 'tokenc') {
+    return <ClaudePermissions {...props} />;
   }
 
   return <CodexPermissions {...props} />;

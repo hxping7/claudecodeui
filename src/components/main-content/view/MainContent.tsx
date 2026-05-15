@@ -85,7 +85,7 @@ function MainContent({
     if (selectedProject && selectedProjectId !== currentProjectId) {
       setCurrentProject?.(selectedProject);
     }
-  }, [selectedProject, currentProject?.projectId, setCurrentProject]);
+  }, [selectedProject?.projectId, currentProject?.projectId, setCurrentProject]);
 
   useEffect(() => {
     if (!shouldShowTasksTab && activeTab === 'tasks') {

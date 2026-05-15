@@ -11,6 +11,9 @@ const getPermissionModesForProvider = (provider: LLMProvider): PermissionMode[] 
   if (provider === 'claude') {
     return ['default', 'auto', 'acceptEdits', 'bypassPermissions', 'plan'];
   }
+  if (provider === 'tokenc') {
+    return ['default', 'auto', 'plan', 'bypassPermissions'];
+  }
   return ['default', 'acceptEdits', 'bypassPermissions', 'plan'];
 };
 

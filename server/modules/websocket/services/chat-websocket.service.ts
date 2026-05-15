@@ -30,10 +30,12 @@ type ChatWebSocketDependencies = {
   spawnCursor: (command: string, options: unknown, writer: WebSocketWriter) => Promise<unknown>;
   queryCodex: (command: string, options: unknown, writer: WebSocketWriter) => Promise<unknown>;
   spawnGemini: (command: string, options: unknown, writer: WebSocketWriter) => Promise<unknown>;
+  spawnTokenc: (command: string, options: unknown, writer: WebSocketWriter) => Promise<unknown>;
   abortClaudeSDKSession: (sessionId: string) => Promise<boolean>;
   abortCursorSession: (sessionId: string) => boolean;
   abortCodexSession: (sessionId: string) => boolean;
   abortGeminiSession: (sessionId: string) => boolean;
+  abortTokencSession: (sessionId: string) => boolean;
   resolveToolApproval: (
     requestId: string,
     payload: {
@@ -47,19 +49,23 @@ type ChatWebSocketDependencies = {
   isCursorSessionActive: (sessionId: string) => boolean;
   isCodexSessionActive: (sessionId: string) => boolean;
   isGeminiSessionActive: (sessionId: string) => boolean;
+  isTokencSessionActive: (sessionId: string) => boolean;
   reconnectSessionWriter: (sessionId: string, ws: WebSocket) => boolean;
+  reconnectTokencSessionWriter: (sessionId: string, ws: WebSocket) => boolean;
   getPendingApprovalsForSession: (sessionId: string) => unknown[];
   getActiveClaudeSDKSessions: () => unknown;
   getActiveCursorSessions: () => unknown;
   getActiveCodexSessions: () => unknown;
   getActiveGeminiSessions: () => unknown;
+  getActiveTokencSessions: () => unknown;
+  resolveTokencPermission: (sessionId: string, requestId: string, decision: { allow: boolean; updatedInput?: unknown; message?: string; rememberEntry?: unknown }) => boolean;
 };
 
 /**
  * Normalizes potentially invalid provider names coming from websocket payloads.
  */
 function readProvider(value: unknown): LLMProvider {
-  if (value === 'claude' || value === 'cursor' || value === 'codex' || value === 'gemini') {
+  if (value === 'claude' || value === 'cursor' || value === 'codex' || value === 'gemini' || value === 'tokenc') {
     return value;
   }
 
@@ -190,6 +196,18 @@ export function handleChatConnection(
         return;
       }
 
+      if (messageType === 'tokenc-command') {
+        const tokencOptions = {
+          ...(data.options || {}),
+          userUid: (ws as any).uid,
+          userGid: (ws as any).gid,
+          homeDir: (ws as any).home_dir,
+          username: (ws as any).username,
+        };
+        await dependencies.spawnTokenc(data.command ?? '', tokencOptions, writer);
+        return;
+      }
+
       if (messageType === 'cursor-resume') {
         await dependencies.spawnCursor(
           '',
@@ -218,6 +236,8 @@ export function handleChatConnection(
           success = dependencies.abortCodexSession(sessionId);
         } else if (provider === 'gemini') {
           success = dependencies.abortGeminiSession(sessionId);
+        } else if (provider === 'tokenc') {
+          success = dependencies.abortTokencSession(sessionId);
         } else {
           success = await dependencies.abortClaudeSDKSession(sessionId);
         }
@@ -238,6 +258,20 @@ export function handleChatConnection(
       if (messageType === 'claude-permission-response') {
         if (typeof data.requestId === 'string' && data.requestId.length > 0) {
           dependencies.resolveToolApproval(data.requestId, {
+            allow: Boolean(data.allow),
+            updatedInput: data.updatedInput,
+            message: typeof data.message === 'string' ? data.message : undefined,
+            rememberEntry: data.rememberEntry,
+          });
+        }
+        return;
+      }
+
+      if (messageType === 'tokenc-permission-response') {
+        const sessionId = typeof data.sessionId === 'string' ? data.sessionId : '';
+        const requestId = typeof data.requestId === 'string' ? data.requestId : '';
+        if (sessionId && requestId) {
+          dependencies.resolveTokencPermission(sessionId, requestId, {
             allow: Boolean(data.allow),
             updatedInput: data.updatedInput,
             message: typeof data.message === 'string' ? data.message : undefined,
@@ -274,6 +308,11 @@ export function handleChatConnection(
           isActive = dependencies.isCodexSessionActive(sessionId);
         } else if (provider === 'gemini') {
           isActive = dependencies.isGeminiSessionActive(sessionId);
+        } else if (provider === 'tokenc') {
+          isActive = dependencies.isTokencSessionActive(sessionId);
+          if (isActive) {
+            dependencies.reconnectTokencSessionWriter(sessionId, ws);
+          }
         } else {
           isActive = dependencies.isClaudeSDKSessionActive(sessionId);
           if (isActive) {
@@ -311,6 +350,7 @@ export function handleChatConnection(
             cursor: dependencies.getActiveCursorSessions(),
             codex: dependencies.getActiveCodexSessions(),
             gemini: dependencies.getActiveGeminiSessions(),
+            tokenc: dependencies.getActiveTokencSessions(),
           },
         });
       }

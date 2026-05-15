@@ -63,7 +63,8 @@ const projectsHaveChanges = (
     return (
       serialize(nextProject.cursorSessions) !== serialize(prevProject.cursorSessions) ||
       serialize(nextProject.codexSessions) !== serialize(prevProject.codexSessions) ||
-      serialize(nextProject.geminiSessions) !== serialize(prevProject.geminiSessions)
+      serialize(nextProject.geminiSessions) !== serialize(prevProject.geminiSessions) ||
+      serialize(nextProject.tokencSessions) !== serialize(prevProject.tokencSessions)
     );
   });
 };
@@ -100,6 +101,7 @@ const getProjectSessions = (project: Project): ProjectSession[] => {
     ...(project.codexSessions ?? []),
     ...(project.cursorSessions ?? []),
     ...(project.geminiSessions ?? []),
+    ...(project.tokencSessions ?? []),
   ];
 };
 
@@ -147,6 +149,7 @@ const mergeExpandedSessionPages = (previousProjects: Project[], incomingProjects
       cursorSessions: mergeSessionProviderLists(incomingProject.cursorSessions ?? [], previousProject.cursorSessions ?? []),
       codexSessions: mergeSessionProviderLists(incomingProject.codexSessions ?? [], previousProject.codexSessions ?? []),
       geminiSessions: mergeSessionProviderLists(incomingProject.geminiSessions ?? [], previousProject.geminiSessions ?? []),
+      tokencSessions: mergeSessionProviderLists(incomingProject.tokencSessions ?? [], previousProject.tokencSessions ?? []),
     };
 
     const totalSessions = Number(incomingProject.sessionMeta?.total ?? previousLoadedCount);
@@ -162,7 +165,7 @@ const mergeExpandedSessionPages = (previousProjects: Project[], incomingProjects
 
 const mergeProjectSessionPage = (
   existingProject: Project,
-  sessionsPage: Pick<Project, 'sessions' | 'cursorSessions' | 'codexSessions' | 'geminiSessions' | 'sessionMeta'>,
+  sessionsPage: Pick<Project, 'sessions' | 'cursorSessions' | 'codexSessions' | 'geminiSessions' | 'tokencSessions' | 'sessionMeta'>,
 ): Project => {
   const mergedProject: Project = {
     ...existingProject,
@@ -170,6 +173,7 @@ const mergeProjectSessionPage = (
     cursorSessions: mergeSessionProviderLists(existingProject.cursorSessions ?? [], sessionsPage.cursorSessions ?? []),
     codexSessions: mergeSessionProviderLists(existingProject.codexSessions ?? [], sessionsPage.codexSessions ?? []),
     geminiSessions: mergeSessionProviderLists(existingProject.geminiSessions ?? [], sessionsPage.geminiSessions ?? []),
+    tokencSessions: mergeSessionProviderLists(existingProject.tokencSessions ?? [], sessionsPage.tokencSessions ?? []),
   };
 
   const totalSessions = Number(sessionsPage.sessionMeta?.total ?? existingProject.sessionMeta?.total ?? 0);
@@ -502,7 +506,20 @@ export function useProjectsState({
       return;
     }
 
-    if (serialize(updatedSelectedProject) !== serialize(selectedProject)) {
+    const selectedSessionChanged = selectedSession
+      ? serialize(
+          getProjectSessions(updatedSelectedProject).find((s) => s.id === selectedSession.id),
+        ) !== serialize(getProjectSessions(selectedProject).find((s) => s.id === selectedSession.id))
+      : false;
+
+    const corePropsChanged =
+      updatedSelectedProject.projectId !== selectedProject.projectId ||
+      updatedSelectedProject.displayName !== selectedProject.displayName ||
+      updatedSelectedProject.fullPath !== selectedProject.fullPath ||
+      updatedSelectedProject.path !== selectedProject.path ||
+      updatedSelectedProject.isStarred !== selectedProject.isStarred;
+
+    if (corePropsChanged || selectedSessionChanged) {
       setSelectedProject(updatedSelectedProject);
     }
 
@@ -517,7 +534,7 @@ export function useProjectsState({
     if (!updatedSelectedSession) {
       setSelectedSession(null);
     }
-  }, [latestMessage, selectedProject, selectedSession, activeSessions, projects]);
+  }, [latestMessage, selectedProject?.projectId, selectedSession?.id, activeSessions, projects]);
 
   useEffect(() => {
     return () => {
@@ -594,6 +611,21 @@ export function useProjectsState({
         }
         return;
       }
+
+      const tokencSession = project.tokencSessions?.find((session) => session.id === sessionId);
+      if (tokencSession) {
+        const shouldUpdateProject = selectedProject?.projectId !== project.projectId;
+        const shouldUpdateSession =
+          selectedSession?.id !== sessionId || selectedSession.__provider !== 'tokenc';
+
+        if (shouldUpdateProject) {
+          setSelectedProject(project);
+        }
+        if (shouldUpdateSession) {
+          setSelectedSession({ ...tokencSession, __provider: 'tokenc' });
+        }
+        return;
+      }
     }
 
     // Session id is in the URL but not yet present on any project payload (common
@@ -630,7 +662,7 @@ export function useProjectsState({
       __projectId: selectedProject.projectId,
       summary: '',
     });
-  }, [sessionId, projects, selectedProject, selectedSession?.id, selectedSession?.__provider]);
+  }, [sessionId, projects, selectedProject?.projectId, selectedSession?.id, selectedSession?.__provider]);
 
   const handleProjectSelect = useCallback(
     (project: Project) => {
@@ -704,12 +736,14 @@ export function useProjectsState({
           const cursorSessions = project.cursorSessions?.filter((session) => session.id !== sessionIdToDelete) ?? [];
           const codexSessions = project.codexSessions?.filter((session) => session.id !== sessionIdToDelete) ?? [];
           const geminiSessions = project.geminiSessions?.filter((session) => session.id !== sessionIdToDelete) ?? [];
+          const tokencSessions = project.tokencSessions?.filter((session) => session.id !== sessionIdToDelete) ?? [];
 
           const removedFromProject = (
             sessions.length !== (project.sessions?.length ?? 0)
             || cursorSessions.length !== (project.cursorSessions?.length ?? 0)
             || codexSessions.length !== (project.codexSessions?.length ?? 0)
             || geminiSessions.length !== (project.geminiSessions?.length ?? 0)
+            || tokencSessions.length !== (project.tokencSessions?.length ?? 0)
           );
 
           if (!removedFromProject) {
@@ -722,6 +756,7 @@ export function useProjectsState({
             cursorSessions,
             codexSessions,
             geminiSessions,
+            tokencSessions,
           };
 
           const totalSessions = Math.max(0, Number(project.sessionMeta?.total ?? 0) - 1);
@@ -759,7 +794,24 @@ export function useProjectsState({
       }
 
       if (serialize(refreshedProject) !== serialize(selectedProject)) {
-        setSelectedProject(refreshedProject);
+        const refreshedSessionData = selectedSession
+          ? getProjectSessions(refreshedProject).find((s) => s.id === selectedSession.id)
+          : undefined;
+        const currentSessionData = selectedSession
+          ? getProjectSessions(selectedProject).find((s) => s.id === selectedSession.id)
+          : undefined;
+        const sessionChanged = selectedSession
+          ? serialize(refreshedSessionData) !== serialize(currentSessionData)
+          : false;
+        const coreChanged =
+          refreshedProject.projectId !== selectedProject.projectId ||
+          refreshedProject.displayName !== selectedProject.displayName ||
+          refreshedProject.fullPath !== selectedProject.fullPath ||
+          refreshedProject.path !== selectedProject.path ||
+          refreshedProject.isStarred !== selectedProject.isStarred;
+        if (coreChanged || sessionChanged) {
+          setSelectedProject(refreshedProject);
+        }
       }
 
       if (!selectedSession) {

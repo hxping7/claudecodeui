@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
 import readline from 'node:readline';
+import os from 'node:os';
 
 import type { IProviderSessions } from '@/shared/interfaces.js';
 import type { AnyRecord, FetchHistoryOptions, FetchHistoryResult, NormalizedMessage } from '@/shared/types.js';
@@ -9,6 +10,22 @@ import { createNormalizedMessage, generateMessageId, readObjectRecord } from '@/
 import { sessionsDb } from '@/modules/database/index.js';
 
 const PROVIDER = 'tokenc';
+
+type ModelCapabilityInfo = {
+  maxInputTokens: number;
+  maxOutputTokens: number;
+};
+
+type ProviderConfig = {
+  baseUrl?: string;
+  apiKey?: string;
+  modelcapbility?: Record<string, ModelCapabilityInfo>;
+};
+
+type ProviderSettings = {
+  current?: string;
+  providers?: Record<string, ProviderConfig>;
+};
 
 type TokencToolResult = {
   content: unknown;
@@ -23,6 +40,7 @@ type TokencHistoryResult =
     messages?: AnyRecord[];
     total?: number;
     hasMore?: boolean;
+    tokenUsage?: AnyRecord;
   };
 
 type TokencHistoryMessagesResult =
@@ -33,7 +51,79 @@ type TokencHistoryMessagesResult =
     hasMore: boolean;
     offset?: number;
     limit?: number | null;
+    tokenUsage?: AnyRecord;
   };
+
+function getModelContextWindow(model: string): number {
+  const DEFAULT_CONTEXT_WINDOW = 200000;
+
+  try {
+    const homeDir = os.homedir();
+    const settingsPath = path.join(homeDir, '.tokencode', 'settings_provider.json');
+    const content = fs.readFileSync(settingsPath, 'utf8');
+    const settings = JSON.parse(content) as ProviderSettings;
+
+    if (!settings.providers) {
+      return DEFAULT_CONTEXT_WINDOW;
+    }
+
+    // Check all providers for model capability
+    for (const providerConfig of Object.values(settings.providers)) {
+      if (!providerConfig.modelcapbility) {
+        continue;
+      }
+
+      // Try exact match first
+      if (providerConfig.modelcapbility[model]) {
+        return providerConfig.modelcapbility[model].maxInputTokens || DEFAULT_CONTEXT_WINDOW;
+      }
+
+      // Try case-insensitive substring match
+      const modelLower = model.toLowerCase();
+      for (const [modelId, capability] of Object.entries(providerConfig.modelcapbility)) {
+        if (modelLower.includes(modelId.toLowerCase()) || modelId.toLowerCase().includes(modelLower)) {
+          return capability.maxInputTokens || DEFAULT_CONTEXT_WINDOW;
+        }
+      }
+    }
+  } catch {
+    // File doesn't exist or error reading
+  }
+
+  return DEFAULT_CONTEXT_WINDOW;
+}
+
+function buildTokencTokenUsage(usage: unknown, model?: string): AnyRecord | undefined {
+  if (!usage || typeof usage !== 'object') {
+    return undefined;
+  }
+
+  const record = usage as AnyRecord;
+  const inputTokens = Number(record.input_tokens || 0);
+  const outputTokens = Number(record.output_tokens || 0);
+  const cacheCreationInputTokens = Number(record.cache_creation_input_tokens || 0);
+  const cacheReadInputTokens = Number(record.cache_read_input_tokens || 0);
+
+  const used = inputTokens + outputTokens + cacheCreationInputTokens + cacheReadInputTokens;
+
+  if (used === 0) {
+    return undefined;
+  }
+
+  // Get context window from settings_provider.json or use default
+  const contextWindow = model ? getModelContextWindow(model) : 200000;
+
+  return {
+    used,
+    total: contextWindow,
+    breakdown: {
+      input: inputTokens + cacheReadInputTokens,
+      output: outputTokens,
+      cacheCreation: cacheCreationInputTokens,
+      cacheRead: cacheReadInputTokens,
+    },
+  };
+}
 
 async function parseAgentTools(filePath: string): Promise<AnyRecord[]> {
   const tools: AnyRecord[] = [];
@@ -182,6 +272,37 @@ export class TokencSessionsProvider implements IProviderSessions {
         }
         break;
 
+      case 'user':
+        if (entry.message && typeof entry.message === 'object') {
+          const message = entry.message as AnyRecord;
+          const contentParts = Array.isArray(message.content) ? message.content : [];
+
+          for (const part of contentParts) {
+            if (!part || typeof part !== 'object') {
+              continue;
+            }
+
+            const typedPart = part as AnyRecord;
+
+            if (typedPart.type === 'tool_result') {
+              normalized.push(createNormalizedMessage({
+                id: generateMessageId(),
+                sessionId: sessionId ?? '',
+                provider: PROVIDER,
+                kind: 'tool_result',
+                role: 'user',
+                toolId: typedPart.tool_use_id,
+                content: Array.isArray(typedPart.content)
+                  ? typedPart.content
+                  : [{ type: 'text', text: String(typedPart.content ?? '') }],
+                isError: typedPart.is_error ?? false,
+                timestamp: new Date().toISOString(),
+              }));
+            }
+          }
+        }
+        break;
+
       case 'result':
         normalized.push(createNormalizedMessage({
           kind: 'complete',
@@ -219,12 +340,27 @@ export class TokencSessionsProvider implements IProviderSessions {
       const content = await fsp.readFile(filePath, 'utf8');
       const lines = content.split('\n').filter((line) => line.trim());
       const allMessages: NormalizedMessage[] = [];
+      let tokenUsage: AnyRecord | undefined;
+      let lastModel: string | undefined;
 
       for (const line of lines) {
         try {
           const parsed = JSON.parse(line);
           const normalized = this.normalizeMessage(parsed, sessionId);
           allMessages.push(...normalized);
+
+          // Extract model name from assistant messages
+          if (parsed.type === 'assistant' && parsed.message?.model) {
+            lastModel = parsed.message.model;
+          }
+
+          // Extract token usage from assistant messages
+          if (parsed.type === 'assistant' && parsed.message?.usage) {
+            const usage = buildTokencTokenUsage(parsed.message.usage, lastModel);
+            if (usage) {
+              tokenUsage = usage;
+            }
+          }
         } catch {
           // Skip malformed JSON lines
         }
@@ -238,6 +374,7 @@ export class TokencSessionsProvider implements IProviderSessions {
         hasMore: offset + limit < allMessages.length,
         offset,
         limit,
+        tokenUsage,
       };
     } catch (error) {
       console.error(`[TokencSessionsProvider] Error reading history file ${filePath}:`, error);

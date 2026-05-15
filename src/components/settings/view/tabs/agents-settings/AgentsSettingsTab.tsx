@@ -30,6 +30,8 @@ export default function AgentsSettingsTab({
   onCodexPermissionModeChange,
   geminiPermissionMode,
   onGeminiPermissionModeChange,
+  tokencPermissions,
+  onTokencPermissionsChange,
   projects,
 }: AgentsSettingsTabProps) {
   const { t } = useTranslation('settings');
@@ -208,6 +210,8 @@ export default function AgentsSettingsTab({
           onCodexPermissionModeChange={onCodexPermissionModeChange}
           geminiPermissionMode={geminiPermissionMode}
           onGeminiPermissionModeChange={onGeminiPermissionModeChange}
+          tokencPermissions={tokencPermissions}
+          onTokencPermissionsChange={onTokencPermissionsChange}
           projects={projects}
         />
       </div>

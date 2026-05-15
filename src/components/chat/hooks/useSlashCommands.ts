@@ -183,7 +183,7 @@ export function useSlashCommands({
       .filter((command) => command.usageCount > 0)
       .sort((commandA, commandB) => commandB.usageCount - commandA.usageCount)
       .slice(0, 5);
-  }, [selectedProject, slashCommands]);
+  }, [selectedProject?.projectId, slashCommands]);
 
   const trackCommandUsage = useCallback(
     (command: SlashCommand) => {
@@ -244,7 +244,7 @@ export function useSlashCommands({
         resetCommandMenuState();
       }
     },
-    [selectedProject, trackCommandUsage, onExecuteCommand, resetCommandMenuState],
+    [selectedProject?.projectId, trackCommandUsage, onExecuteCommand, resetCommandMenuState],
   );
 
   const handleToggleCommandMenu = useCallback(() => {

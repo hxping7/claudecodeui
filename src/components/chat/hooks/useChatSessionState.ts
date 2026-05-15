@@ -343,7 +343,7 @@ export function useChatSessionState({
         isLoadingMoreRef.current = false;
       }
     },
-    [hasMoreMessages, isLoadingMoreMessages, selectedProject, selectedSession, sessionStore],
+    [hasMoreMessages, isLoadingMoreMessages, selectedProject?.projectId, selectedProject?.fullPath, selectedProject?.path, selectedSession?.id, selectedSession?.__provider, sessionStore],
   );
 
   const handleScroll = useCallback(async () => {
@@ -479,8 +479,11 @@ export function useChatSessionState({
   }, [
     pendingViewSessionRef,
     resetStreamingState,
-    selectedProject,
+    selectedProject?.projectId,
+    selectedProject?.fullPath,
+    selectedProject?.path,
     selectedSession?.id,
+    selectedSession?.__provider,
     sendMessage,
     ws,
     sessionStore,
@@ -517,8 +520,11 @@ export function useChatSessionState({
     externalMessageUpdate,
     isNearBottom,
     scrollToBottom,
-    selectedProject,
-    selectedSession,
+    selectedProject?.projectId,
+    selectedProject?.fullPath,
+    selectedProject?.path,
+    selectedSession?.id,
+    selectedSession?.__provider,
     sessionStore,
     isLoading,
   ]);
@@ -650,7 +656,7 @@ export function useChatSessionState({
       }
     };
     fetchInitialTokenUsage();
-  }, [selectedProject, selectedSession?.id, selectedSession?.__provider]);
+  }, [selectedProject?.projectId, selectedSession?.id, selectedSession?.__provider]);
 
   const visibleMessages = useMemo(() => {
     if (chatMessages.length <= visibleMessageCount) return chatMessages;
@@ -778,7 +784,7 @@ export function useChatSessionState({
       isLoadingMoreRef.current = false;
       setIsLoadingAllMessages(false);
     }
-  }, [selectedSession, selectedProject, isLoadingAllMessages, currentSessionId, sessionStore]);
+  }, [selectedSession?.id, selectedSession?.__provider, selectedProject?.projectId, selectedProject?.fullPath, selectedProject?.path, isLoadingAllMessages, currentSessionId, sessionStore]);
 
   const loadEarlierMessages = useCallback(() => {
     setVisibleMessageCount((prev) => prev + 100);

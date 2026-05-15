@@ -100,12 +100,15 @@ export const GEMINI_MODELS = {
  */
 export const TOKENC_MODELS = {
   OPTIONS: [
+    { value: "default", label: "Default" },
     { value: "opus", label: "Opus" },
     { value: "sonnet", label: "Sonnet" },
     { value: "haiku", label: "Haiku" },
+    { value: "thinking", label: "Thinking" },
+    { value: "subAgent", label: "SubAgent" },
   ],
 
-  DEFAULT: "opus",
+  DEFAULT: "default",
 };
 
 /**

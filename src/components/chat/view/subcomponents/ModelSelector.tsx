@@ -9,6 +9,7 @@ import {
   CURSOR_MODELS,
   CODEX_MODELS,
   GEMINI_MODELS,
+  TOKENC_MODELS,
 } from '../../../../../shared/modelConstants';
 
 type ModelSelectorProps = {
@@ -22,6 +23,7 @@ function getStaticModels(provider: LLMProvider) {
   if (provider === 'claude') return CLAUDE_MODELS.OPTIONS;
   if (provider === 'codex') return CODEX_MODELS.OPTIONS;
   if (provider === 'gemini') return GEMINI_MODELS.OPTIONS;
+  if (provider === 'tokenc') return TOKENC_MODELS.OPTIONS;
   return CURSOR_MODELS.OPTIONS;
 }
 

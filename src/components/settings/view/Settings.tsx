@@ -36,6 +36,8 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }: Set
     providerAuthStatus,
     geminiPermissionMode,
     setGeminiPermissionMode,
+    tokencPermissions,
+    setTokencPermissions,
     openLoginForProvider,
     showLoginModal,
     setShowLoginModal,
@@ -133,6 +135,8 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }: Set
                   onCodexPermissionModeChange={setCodexPermissionMode}
                   geminiPermissionMode={geminiPermissionMode}
                   onGeminiPermissionModeChange={setGeminiPermissionMode}
+                  tokencPermissions={tokencPermissions}
+                  onTokencPermissionsChange={setTokencPermissions}
                   projects={projects}
                 />
               )}

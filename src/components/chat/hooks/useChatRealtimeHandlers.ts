@@ -139,6 +139,9 @@ export function useChatRealtimeHandlers({
           const statusSessionId = msg.sessionId;
           if (!statusSessionId) return;
 
+          const isCurrentStatusSession =
+            statusSessionId === currentSessionId || (selectedSession && statusSessionId === selectedSession.id);
+
           const status = msg.status;
           if (status) {
             const statusInfo = {
@@ -146,9 +149,11 @@ export function useChatRealtimeHandlers({
               tokens: status.tokens || 0,
               can_interrupt: status.can_interrupt !== undefined ? status.can_interrupt : true,
             };
-            setClaudeStatus(statusInfo);
-            setIsLoading(true);
-            setCanAbortSession(statusInfo.can_interrupt);
+            if (isCurrentStatusSession) {
+              setClaudeStatus(statusInfo);
+              setIsLoading(true);
+              setCanAbortSession(statusInfo.can_interrupt);
+            }
             return;
           }
 
@@ -260,10 +265,15 @@ export function useChatRealtimeHandlers({
         accumulatedStreamRef.current = '';
         streamBufferRef.current = '';
 
-        setIsLoading(false);
-        setCanAbortSession(false);
-        setClaudeStatus(null);
-        setPendingPermissionRequests([]);
+        const isCompleteForCurrentSession =
+          sid === activeViewSessionId;
+
+        if (isCompleteForCurrentSession) {
+          setIsLoading(false);
+          setCanAbortSession(false);
+          setClaudeStatus(null);
+          setPendingPermissionRequests([]);
+        }
         onSessionInactive?.(sid);
         onSessionNotProcessing?.(sid);
 
@@ -330,9 +340,11 @@ export function useChatRealtimeHandlers({
       }
 
       case 'error': {
-        setIsLoading(false);
-        setCanAbortSession(false);
-        setClaudeStatus(null);
+        if (sid === activeViewSessionId) {
+          setIsLoading(false);
+          setCanAbortSession(false);
+          setClaudeStatus(null);
+        }
         onSessionInactive?.(sid);
         onSessionNotProcessing?.(sid);
         break;
@@ -351,9 +363,11 @@ export function useChatRealtimeHandlers({
             receivedAt: new Date(),
           }];
         });
-        setIsLoading(true);
-        setCanAbortSession(true);
-        setClaudeStatus({ text: 'Waiting for permission', tokens: 0, can_interrupt: true });
+        if (sid === activeViewSessionId) {
+          setIsLoading(true);
+          setCanAbortSession(true);
+          setClaudeStatus({ text: 'Waiting for permission', tokens: 0, can_interrupt: true });
+        }
         break;
       }
 
@@ -368,13 +382,15 @@ export function useChatRealtimeHandlers({
         if (msg.text === 'token_budget' && msg.tokenBudget) {
           setTokenBudget(msg.tokenBudget as Record<string, unknown>);
         } else if (msg.text) {
-          setClaudeStatus({
-            text: msg.text,
-            tokens: msg.tokens || 0,
-            can_interrupt: msg.canInterrupt !== undefined ? msg.canInterrupt : true,
-          });
-          setIsLoading(true);
-          setCanAbortSession(msg.canInterrupt !== false);
+          if (sid === activeViewSessionId) {
+            setClaudeStatus({
+              text: msg.text,
+              tokens: msg.tokens || 0,
+              can_interrupt: msg.canInterrupt !== undefined ? msg.canInterrupt : true,
+            });
+            setIsLoading(true);
+            setCanAbortSession(msg.canInterrupt !== false);
+          }
         }
         break;
       }
@@ -387,7 +403,6 @@ export function useChatRealtimeHandlers({
   }, [
     latestMessage,
     provider,
-    selectedProject,
     selectedSession,
     currentSessionId,
     setCurrentSessionId,

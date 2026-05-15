@@ -61,6 +61,7 @@ const getProviderSettingsPaths = (userHomeDir) => ({
   cursor: () => path.join(userHomeDir, '.cursor', 'settings.json'),
   codex: () => path.join(userHomeDir, '.codex', 'settings.json'),
   gemini: () => path.join(userHomeDir, '.gemini', 'settings.json'),
+  tokenc: () => path.join(userHomeDir, '.tokencode', 'settings.json'),
 });
 
 // Helper wrapper to get settings paths for current user

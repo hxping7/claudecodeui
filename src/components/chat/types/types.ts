@@ -46,6 +46,7 @@ export interface ChatMessage {
     currentToolIndex: number;
     isComplete: boolean;
   };
+  provider?: string;
   [key: string]: unknown;
 }
 

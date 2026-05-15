@@ -577,7 +577,9 @@ export function useChatComposerState({
                 ? 'codex-settings'
                 : provider === 'gemini'
                   ? 'gemini-settings'
-                  : 'claude-settings';
+                  : provider === 'tokenc'
+                    ? 'tokenc-settings'
+                    : 'claude-settings';
           const savedSettings = safeLocalStorage.getItem(settingsKey);
           if (savedSettings) {
             return JSON.parse(savedSettings);
@@ -641,6 +643,23 @@ export function useChatComposerState({
             model: geminiModel,
             sessionSummary,
             permissionMode,
+            toolsSettings,
+          },
+        });
+      } else if (provider === 'tokenc') {
+        sendMessage({
+          type: 'tokenc-command',
+          command: messageContent,
+          sessionId: effectiveSessionId,
+          options: {
+            cwd: resolvedProjectPath,
+            projectPath: resolvedProjectPath,
+            sessionId: effectiveSessionId,
+            resume: Boolean(effectiveSessionId),
+            model: tokencModel,
+            skipPermissions: permissionMode === 'bypassPermissions',
+            permissionMode: permissionMode === 'plan' ? 'default' : permissionMode,
+            sessionSummary,
             toolsSettings,
           },
         });

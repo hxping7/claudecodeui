@@ -44,8 +44,9 @@ type InteractiveOption = {
 type PermissionGrantState = 'idle' | 'granted' | 'error';
 const COPY_HIDDEN_TOOL_NAMES = new Set(['Bash', 'Edit', 'Write', 'ApplyPatch']);
 
-const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, onShowSettings, onGrantToolPermission, autoExpandTools, showRawParameters, showThinking, selectedProject, provider }: MessageComponentProps) => {
+const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, onShowSettings, onGrantToolPermission, autoExpandTools, showRawParameters, showThinking, selectedProject, provider: parentProvider }: MessageComponentProps) => {
   const { t } = useTranslation('chat');
+  const effectiveProvider = (message.provider || parentProvider) as string;
   const isGrouped = prevMessage && prevMessage.type === message.type &&
     ((prevMessage.type === 'assistant') ||
       (prevMessage.type === 'user') ||
@@ -53,7 +54,7 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, o
       (prevMessage.type === 'error'));
   const messageRef = useRef<HTMLDivElement | null>(null);
   const [isExpanded, setIsExpanded] = useState(false);
-  const permissionSuggestion = getClaudePermissionSuggestion(message, provider);
+  const permissionSuggestion = getClaudePermissionSuggestion(message, effectiveProvider);
   const [permissionGrantState, setPermissionGrantState] = useState<PermissionGrantState>('idle');
   const userCopyContent = String(message.content || '');
   const formattedMessageContent = useMemo(
@@ -171,13 +172,15 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, o
                   🔧
                 </div>
               ) : (
-                <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full p-1 text-sm text-white">
-                  <SessionProviderLogo provider={provider} className="h-full w-full" />
+                <div className="flex items-center gap-2">
+                  <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full p-1 text-sm text-white">
+                    <SessionProviderLogo provider={effectiveProvider} className="h-full w-full" />
+                  </div>
+                  <div className="text-sm font-medium text-gray-900 dark:text-white">
+                    {message.type === 'error' ? t('messageTypes.error') : message.type === 'tool' ? t('messageTypes.tool') : (effectiveProvider === 'cursor' ? t('messageTypes.cursor') : effectiveProvider === 'codex' ? t('messageTypes.codex') : effectiveProvider === 'gemini' ? t('messageTypes.gemini') : effectiveProvider === 'tokenc' ? t('messageTypes.tokenc') || 'Tokenc' : t('messageTypes.claude'))}
+                  </div>
                 </div>
               )}
-              <div className="text-sm font-medium text-gray-900 dark:text-white">
-                {message.type === 'error' ? t('messageTypes.error') : message.type === 'tool' ? t('messageTypes.tool') : (provider === 'cursor' ? t('messageTypes.cursor') : provider === 'codex' ? t('messageTypes.codex') : provider === 'gemini' ? t('messageTypes.gemini') : t('messageTypes.claude'))}
-              </div>
             </div>
           )}
 

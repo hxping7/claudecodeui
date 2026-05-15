@@ -77,6 +77,10 @@ export const getSessionName = (session: SessionWithProvider, t: TFunction): stri
     return session.summary || session.name || t('projects.newSession');
   }
 
+  if (session.__provider === 'tokenc') {
+    return session.summary || session.name || t('projects.newSession');
+  }
+
   return session.summary || t('projects.newSession');
 };
 
@@ -132,7 +136,12 @@ export const getAllSessions = (project: Project): SessionWithProvider[] => {
     __provider: 'gemini' as const,
   }));
 
-  return [...claudeSessions, ...cursorSessions, ...codexSessions, ...geminiSessions].sort(
+  const tokencSessions = (project.tokencSessions || []).map((session) => ({
+    ...session,
+    __provider: 'tokenc' as const,
+  }));
+
+  return [...claudeSessions, ...cursorSessions, ...codexSessions, ...geminiSessions, ...tokencSessions].sort(
     (a, b) => getSessionDate(b).getTime() - getSessionDate(a).getTime(),
   );
 };

@@ -16,6 +16,10 @@ export default function AgentCategoryContentSection({
   onCursorPermissionsChange,
   codexPermissionMode,
   onCodexPermissionModeChange,
+  geminiPermissionMode,
+  onGeminiPermissionModeChange,
+  tokencPermissions,
+  onTokencPermissionsChange,
   projects,
 }: AgentCategoryContentSectionProps) {
   return (
@@ -69,6 +73,24 @@ export default function AgentCategoryContentSection({
           agent="codex"
           permissionMode={codexPermissionMode}
           onPermissionModeChange={onCodexPermissionModeChange}
+        />
+      )}
+
+      {selectedCategory === 'permissions' && selectedAgent === 'tokenc' && (
+        <PermissionsContent
+          agent="tokenc"
+          skipPermissions={tokencPermissions.skipPermissions}
+          onSkipPermissionsChange={(value) => {
+            onTokencPermissionsChange({ ...tokencPermissions, skipPermissions: value });
+          }}
+          allowedTools={tokencPermissions.allowedTools}
+          onAllowedToolsChange={(value) => {
+            onTokencPermissionsChange({ ...tokencPermissions, allowedTools: value });
+          }}
+          disallowedTools={tokencPermissions.disallowedTools}
+          onDisallowedToolsChange={(value) => {
+            onTokencPermissionsChange({ ...tokencPermissions, disallowedTools: value });
+          }}
         />
       )}
 

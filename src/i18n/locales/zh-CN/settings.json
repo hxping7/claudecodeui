@@ -326,6 +326,9 @@
       },
       "gemini": {
         "description": "Google Gemini AI 助手"
+      },
+      "tokenc": {
+        "description": "Tokenc AI 助手 (兼容 Claude)"
       }
     },
     "connectionStatus": "连接状态",

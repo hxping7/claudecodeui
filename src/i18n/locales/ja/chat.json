@@ -17,7 +17,9 @@
     "tool": "ツール",
     "claude": "Claude",
     "cursor": "Cursor",
-    "codex": "Codex"
+    "codex": "Codex",
+    "gemini": "Gemini",
+    "tokenc": "Tokenc"
   },
   "tools": {
     "settings": "ツール設定",

@@ -100,25 +100,42 @@ export class TokencSessionSynchronizer implements IProviderSessionSynchronizer {
 
       let sessionId: string | null = null;
       let projectPath: string | null = null;
+      let firstUserMessage: string | null = null;
 
       for (const line of lines) {
         try {
           const entry = JSON.parse(line);
 
           if (entry.type === 'system' && entry.subtype === 'init' && !sessionId) {
-            sessionId = entry.session_id ?? null;
+            sessionId = entry.session_id ?? entry.sessionId ?? null;
             projectPath = entry.cwd ?? null;
           }
 
-          if (entry.session_id && !sessionId) {
-            sessionId = entry.session_id;
+          if (!sessionId) {
+            sessionId = entry.session_id ?? entry.sessionId ?? null;
           }
 
           if (entry.cwd && !projectPath) {
             projectPath = entry.cwd;
           }
 
-          if (sessionId && projectPath) {
+          if (!firstUserMessage && entry.type === 'user' && entry.message?.content) {
+            const msg = typeof entry.message.content === 'string'
+              ? entry.message.content
+              : Array.isArray(entry.message.content)
+                ? entry.message.content.map((c: any) => c.text || c.content || '').filter(Boolean).join(' ')
+                : null;
+            if (msg) {
+              firstUserMessage = msg;
+            }
+          }
+
+          if (!firstUserMessage && entry.type === 'last-prompt' && entry.lastPrompt) {
+            firstUserMessage = entry.lastPrompt;
+          }
+
+          // Only break early if we have all the information we need
+          if (sessionId && projectPath && firstUserMessage) {
             break;
           }
         } catch {
@@ -126,11 +143,23 @@ export class TokencSessionSynchronizer implements IProviderSessionSynchronizer {
         }
       }
 
+      if (!sessionId) {
+        const match = filePath.match(/([a-f0-9-]{36})\.jsonl$/);
+        if (match?.[1]) {
+          sessionId = match[1];
+        }
+      }
+
       if (!sessionId || !projectPath) {
         return null;
       }
 
-      const sessionName = normalizeSessionName(nameMap.get(sessionId), sessionId);
+      // Use nameMap from history.jsonl first, fall back to first user message, then sessionId
+      const nameFromHistory = nameMap.get(sessionId);
+      const sessionName = normalizeSessionName(
+        nameFromHistory || firstUserMessage || undefined,
+        sessionId
+      );
 
       return { sessionId, projectPath, sessionName };
     } catch (error) {

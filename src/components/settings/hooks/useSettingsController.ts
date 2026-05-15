@@ -137,6 +137,9 @@ export function useSettingsController({ isOpen, initialTab }: UseSettingsControl
   ));
   const [codexPermissionMode, setCodexPermissionMode] = useState<CodexPermissionMode>('default');
   const [geminiPermissionMode, setGeminiPermissionMode] = useState<GeminiPermissionMode>('default');
+  const [tokencPermissions, setTokencPermissions] = useState<ClaudePermissionsState>(() => (
+    createEmptyClaudePermissions()
+  ));
 
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [loginProvider, setLoginProvider] = useState<ActiveLoginProvider>('');
@@ -378,6 +381,8 @@ export function useSettingsController({ isOpen, initialTab }: UseSettingsControl
     providerAuthStatus,
     geminiPermissionMode,
     setGeminiPermissionMode,
+    tokencPermissions,
+    setTokencPermissions,
     openLoginForProvider,
     showLoginModal,
     setShowLoginModal,

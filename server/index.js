@@ -45,6 +45,14 @@ import {
     isGeminiSessionActive,
     getActiveGeminiSessions,
 } from './gemini-cli.js';
+import {
+    spawnTokenc,
+    abortTokencSession,
+    isTokencSessionActive,
+    getActiveTokencSessions,
+    reconnectTokencSessionWriter,
+    resolveTokencPermission,
+} from './tokenc-cli.js';
 import sessionManager from './sessionManager.js';
 import {
     stripAnsiSequences,
@@ -115,21 +123,27 @@ const wss = createWebSocketServer(server, {
         spawnCursor,
         queryCodex,
         spawnGemini,
+        spawnTokenc,
         abortClaudeSDKSession,
         abortCursorSession,
         abortCodexSession,
         abortGeminiSession,
+        abortTokencSession,
         resolveToolApproval,
         isClaudeSDKSessionActive,
         isCursorSessionActive,
         isCodexSessionActive,
         isGeminiSessionActive,
+        isTokencSessionActive,
         reconnectSessionWriter,
+        reconnectTokencSessionWriter,
         getPendingApprovalsForSession,
         getActiveClaudeSDKSessions,
         getActiveCursorSessions,
         getActiveCodexSessions,
         getActiveGeminiSessions,
+        getActiveTokencSessions,
+        resolveTokencPermission,
     },
     shell: {
         getSessionById: (sessionId) => sessionManager.getSession(sessionId),
@@ -227,7 +241,8 @@ app.get('/api/public/models', (req, res) => {
       claude: [],
       cursor: [],
       codex: [],
-      gemini: []
+      gemini: [],
+      tokenc: []
     };
 
     // Use authenticated user's home directory for PAM mode
@@ -241,6 +256,7 @@ app.get('/api/public/models', (req, res) => {
       cursor: () => path.join(userHome, '.cursor', 'settings.json'),
       codex: () => path.join(userHome, '.codex', 'settings.json'),
       gemini: () => path.join(userHome, '.gemini', 'settings.json'),
+      tokenc: () => path.join(userHome, '.tokencode', 'settings.json'),
     };
 
     // Read Claude settings
@@ -274,6 +290,38 @@ app.get('/api/public/models', (req, res) => {
       }
     }
 
+    // Read Tokenc settings (same env keys as Claude)
+    const tokencSettingsPath = PROVIDER_SETTINGS_PATHS.tokenc();
+    if (fs.existsSync(tokencSettingsPath)) {
+      try {
+        const content = fs.readFileSync(tokencSettingsPath, 'utf8');
+        const settings = JSON.parse(content);
+        const env = settings.env || {};
+
+        const opusActual = env.ANTHROPIC_DEFAULT_OPUS_MODEL;
+        const sonnetActual = env.ANTHROPIC_DEFAULT_SONNET_MODEL;
+        const haikuActual = env.ANTHROPIC_DEFAULT_HAIKU_MODEL;
+        const defaultActual = env.ANTHROPIC_MODEL;
+        const reasoningActual = env.ANTHROPIC_REASONING_MODEL;
+        const subAgentActual = env.CLAUDE_CODE_SUBAGENT_MODEL;
+
+        models.tokenc = [
+          { value: 'default', label: defaultActual ? `Default (${defaultActual})` : 'Default', envKey: 'ANTHROPIC_MODEL', actualModel: defaultActual },
+          { value: 'opus', label: opusActual ? `Opus (${opusActual})` : 'Opus', envKey: 'ANTHROPIC_DEFAULT_OPUS_MODEL', actualModel: opusActual },
+          { value: 'sonnet', label: sonnetActual ? `Sonnet (${sonnetActual})` : 'Sonnet', envKey: 'ANTHROPIC_DEFAULT_SONNET_MODEL', actualModel: sonnetActual },
+          { value: 'haiku', label: haikuActual ? `Haiku (${haikuActual})` : 'Haiku', envKey: 'ANTHROPIC_DEFAULT_HAIKU_MODEL', actualModel: haikuActual },
+          { value: 'thinking', label: reasoningActual ? `Thinking (${reasoningActual})` : 'Thinking', envKey: 'ANTHROPIC_REASONING_MODEL', actualModel: reasoningActual },
+          { value: 'subAgent', label: subAgentActual ? `SubAgent (${subAgentActual})` : 'SubAgent', envKey: 'CLAUDE_CODE_SUBAGENT_MODEL', actualModel: subAgentActual },
+        ];
+
+        if (env.ANTHROPIC_MODEL) {
+          models.tokenc.defaultModel = env.ANTHROPIC_MODEL;
+        }
+      } catch (e) {
+        console.error('Error parsing Tokenc settings:', e);
+      }
+    }
+
     res.json({ success: true, models });
 });
 
@@ -284,7 +332,8 @@ app.get('/api/models', authenticateToken, (req, res) => {
     claude: [],
     cursor: [],
     codex: [],
-    gemini: []
+    gemini: [],
+    tokenc: []
   };
 
   // Get user's home directory from token or database
@@ -298,6 +347,7 @@ app.get('/api/models', authenticateToken, (req, res) => {
     cursor: () => path.join(userHome, '.cursor', 'settings.json'),
     codex: () => path.join(userHome, '.codex', 'settings.json'),
     gemini: () => path.join(userHome, '.gemini', 'settings.json'),
+    tokenc: () => path.join(userHome, '.tokencode', 'settings.json'),
   };
 
   // Read Claude settings
@@ -328,6 +378,38 @@ app.get('/api/models', authenticateToken, (req, res) => {
       }
     } catch (e) {
       console.error('Error parsing Claude settings:', e);
+    }
+  }
+
+  // Read Tokenc settings (same env keys as Claude)
+  const tokencSettingsPath = PROVIDER_SETTINGS_PATHS.tokenc();
+  if (fs.existsSync(tokencSettingsPath)) {
+    try {
+      const content = fs.readFileSync(tokencSettingsPath, 'utf8');
+      const settings = JSON.parse(content);
+      const env = settings.env || {};
+
+      const opusActual = env.ANTHROPIC_DEFAULT_OPUS_MODEL;
+      const sonnetActual = env.ANTHROPIC_DEFAULT_SONNET_MODEL;
+      const haikuActual = env.ANTHROPIC_DEFAULT_HAIKU_MODEL;
+      const defaultActual = env.ANTHROPIC_MODEL;
+      const reasoningActual = env.ANTHROPIC_REASONING_MODEL;
+      const subAgentActual = env.CLAUDE_CODE_SUBAGENT_MODEL;
+
+      models.tokenc = [
+        { value: 'default', label: defaultActual ? `Default (${defaultActual})` : 'Default', envKey: 'ANTHROPIC_MODEL', actualModel: defaultActual },
+        { value: 'opus', label: opusActual ? `Opus (${opusActual})` : 'Opus', envKey: 'ANTHROPIC_DEFAULT_OPUS_MODEL', actualModel: opusActual },
+        { value: 'sonnet', label: sonnetActual ? `Sonnet (${sonnetActual})` : 'Sonnet', envKey: 'ANTHROPIC_DEFAULT_SONNET_MODEL', actualModel: sonnetActual },
+        { value: 'haiku', label: haikuActual ? `Haiku (${haikuActual})` : 'Haiku', envKey: 'ANTHROPIC_DEFAULT_HAIKU_MODEL', actualModel: haikuActual },
+        { value: 'thinking', label: reasoningActual ? `Thinking (${reasoningActual})` : 'Thinking', envKey: 'ANTHROPIC_REASONING_MODEL', actualModel: reasoningActual },
+        { value: 'subAgent', label: subAgentActual ? `SubAgent (${subAgentActual})` : 'SubAgent', envKey: 'CLAUDE_CODE_SUBAGENT_MODEL', actualModel: subAgentActual },
+      ];
+
+      if (env.ANTHROPIC_MODEL) {
+        models.tokenc.defaultModel = env.ANTHROPIC_MODEL;
+      }
+    } catch (e) {
+      console.error('Error parsing Tokenc settings:', e);
     }
   }
 

@@ -1027,7 +1027,7 @@ router.post('/', validateExternalApiKey, async (req, res) => {
         cwd: finalProjectPath,
         sessionId: sessionId || null,
         model: model || undefined,
-        skipPermissions: true,
+        permissionMode: 'bypassPermissions',
         userUid: req.user?.uid,
         userGid: req.user?.gid,
         username: req.user?.username,

@@ -277,7 +277,7 @@ function ChatInterface({
     });
     setIsLoading(false);
     setCanAbortSession(false);
-  }, [selectedProject, selectedSession, sessionStore, setIsLoading, setCanAbortSession]);
+  }, [selectedProject?.projectId, selectedProject?.fullPath, selectedProject?.path, selectedSession, sessionStore, setIsLoading, setCanAbortSession]);
 
   useChatRealtimeHandlers({
     latestMessage,

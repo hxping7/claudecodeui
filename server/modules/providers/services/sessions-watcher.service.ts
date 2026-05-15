@@ -42,6 +42,7 @@ function buildProviderWatchPaths(): Array<{ provider: LLMProvider; rootPath: str
       { provider: 'codex', rootPath: path.join(homeDir, '.codex', 'sessions') },
       { provider: 'gemini', rootPath: path.join(homeDir, '.gemini', 'sessions') },
       { provider: 'gemini', rootPath: path.join(homeDir, '.gemini', 'tmp') },
+      { provider: 'tokenc', rootPath: path.join(homeDir, '.tokencode', 'projects') },
     );
   }
 
