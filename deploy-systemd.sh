@@ -18,15 +18,33 @@ set -euo pipefail
 # 默认配置
 APP_DIR_DEFAULT="/home/hxp/code/tools/claudecodeui"
 SERVICE_NAME_DEFAULT="cloudcli"
-PORT_DEFAULT="8250"
 DATA_DIR_DEFAULT="/var/lib/cloudcli"
 DEPLOY_MODE_DEFAULT="systemd"
 WORKERS_DEFAULT=4
 MAX_MEMORY_DEFAULT="2G"
 
-# 从环境变量或参数读取配置
+# 部署配置文件 (持久化配置)
+DEPLOY_CONF="/etc/cloudcli/deploy.conf"
+
+# 保存命令行传入的环境变量 (优先级最高)
+CUSTOM_PORT="${PORT:-}"
+CUSTOM_WORKERS="${WORKERS:-}"
+CUSTOM_DEPLOY_MODE="${DEPLOY_MODE:-}"
+
+# 从配置文件加载 (如果存在)
+if [[ -f "$DEPLOY_CONF" ]]; then
+  source "$DEPLOY_CONF"
+fi
+
+# 命令行环境变量覆盖配置文件
+[[ -n "$CUSTOM_PORT" ]] && PORT="$CUSTOM_PORT"
+[[ -n "$CUSTOM_WORKERS" ]] && WORKERS="$CUSTOM_WORKERS"
+[[ -n "$CUSTOM_DEPLOY_MODE" ]] && DEPLOY_MODE="$CUSTOM_DEPLOY_MODE"
+
+# 从环境变量或参数读取配置 (最终默认值)
 APP_DIR="${APP_DIR:-$APP_DIR_DEFAULT}"
 SERVICE_NAME="${SERVICE_NAME:-$SERVICE_NAME_DEFAULT}"
+PORT_DEFAULT="8250"
 PORT="${PORT:-$PORT_DEFAULT}"
 PLATFORM_MODE="${PLATFORM_MODE:-false}"
 DATA_DIR="${DATA_DIR:-$DATA_DIR_DEFAULT}"
@@ -94,6 +112,37 @@ export DATABASE_PATH
 
 log_info "部署模式: $DEPLOY_MODE"
 log_info "工作目录: $APP_DIR"
+
+# 生成/更新部署配置文件
+if [[ ! -f "$DEPLOY_CONF" ]]; then
+  mkdir -p "$(dirname "$DEPLOY_CONF")" 2>/dev/null || true
+  cat > "$DEPLOY_CONF" <<EOF
+# CloudCLI Debug 部署配置 (Systemd 单实例)
+# 位置: /etc/cloudcli/deploy.conf (与 deploy-production.sh 共用)
+# 修改后重新运行部署脚本即可生效: sudo bash deploy-systemd.sh
+
+# =============================================================================
+# 端口配置 (防火墙规则自动同步)
+# =============================================================================
+# PORT - 应用调试端口 (Systemd 单实例模式, 与生产环境端口不同!)
+#   必须开放此端口, 否则无法访问 Debug 环境
+#   默认值: 8251 | 与生产环境 8250 端口隔离, 互不影响
+PORT=${PORT}
+
+# WORKERS - 进程数 (systemd 模式通常为 1, PM2 模式可多进程)
+WORKERS=${WORKERS}
+
+# DATA_DIR - 数据存储目录 (独立于生产环境, 避免冲突)
+DATA_DIR=${DATA_DIR}
+
+# DEPLOY_MODE - 部署模式 (systemd 单实例 / pm2 集群)
+DEPLOY_MODE=${DEPLOY_MODE}
+EOF
+  chmod 644 "$DEPLOY_CONF"
+  log_info "已生成部署配置文件: ${DEPLOY_CONF}"
+else
+  log_info "部署配置文件已存在: ${DEPLOY_CONF}"
+fi
 log_info "服务端口: $PORT"
 
 # =============================================================================

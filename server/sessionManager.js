@@ -1,11 +1,38 @@
 import { promises as fs } from 'fs';
 import path from 'path';
+
 import { getCurrentUserHomeDir } from './claude-sdk.js';
+import {
+  saveSessionToRedis,
+  getSessionFromRedis,
+  deleteSessionFromRedis,
+  getUserSessionsFromRedis,
+  addMessageToSession,
+  updateSessionActivity,
+} from './modules/redis/index.js';
+
+const USE_REDIS = process.env.REDIS_URL || process.env.USE_REDIS === 'true';
 
 class SessionManager {
   constructor() {
-    this.userSessions = new Map();
+    this.localCache = new Map();
     this.maxSessionsPerUser = 100;
+    this.redisAvailable = false;
+    
+    if (USE_REDIS) {
+      this.checkRedisAvailability();
+    }
+  }
+
+  async checkRedisAvailability() {
+    try {
+      const { checkRedisHealth } = await import('./modules/redis/index.js');
+      this.redisAvailable = await checkRedisHealth();
+      console.log(`[SessionManager] Redis 可用: ${this.redisAvailable}`);
+    } catch (error) {
+      console.warn('[SessionManager] Redis 不可用，使用本地存储');
+      this.redisAvailable = false;
+    }
   }
 
   _getSessionsDir() {
@@ -16,16 +43,18 @@ class SessionManager {
     return path.join(homeDir, '.gemini', 'sessions');
   }
 
-  _getUserSessions() {
+  _getUserCacheKey() {
     const homeDir = getCurrentUserHomeDir();
-    if (!homeDir) {
-      throw new Error('No user home directory available in request context');
-    }
+    return `sessions:${homeDir}`;
+  }
+
+  _getUserLocalSessions() {
+    const cacheKey = this._getUserCacheKey();
     
-    if (!this.userSessions.has(homeDir)) {
-      this.userSessions.set(homeDir, new Map());
+    if (!this.localCache.has(cacheKey)) {
+      this.localCache.set(cacheKey, new Map());
     }
-    return this.userSessions.get(homeDir);
+    return this.localCache.get(cacheKey);
   }
 
   async _ensureSessionsDir() {
@@ -33,36 +62,50 @@ class SessionManager {
     try {
       await fs.mkdir(sessionsDir, { recursive: true });
     } catch (error) {
-      // Ignore if already exists
     }
     return sessionsDir;
   }
 
   async createSession(sessionId, projectPath) {
-    const sessions = this._getUserSessions();
+    const userId = getCurrentUserHomeDir() || 'unknown';
+    const now = new Date().toISOString();
     
     const session = {
       id: sessionId,
       projectPath: projectPath,
       messages: [],
-      createdAt: new Date(),
-      lastActivity: new Date()
+      createdAt: now,
+      lastActivity: now
     };
 
-    if (sessions.size >= this.maxSessionsPerUser) {
-      const oldestKey = sessions.keys().next().value;
-      if (oldestKey) sessions.delete(oldestKey);
+    if (this.redisAvailable) {
+      await saveSessionToRedis({
+        ...session,
+        userId,
+      });
     }
 
-    sessions.set(sessionId, session);
-    await this.saveSession(sessionId);
+    const localSessions = this._getUserLocalSessions();
+    if (localSessions.size >= this.maxSessionsPerUser) {
+      const oldestKey = localSessions.keys().next().value;
+      if (oldestKey) localSessions.delete(oldestKey);
+    }
+
+    localSessions.set(sessionId, session);
+    await this.saveSessionToLocal(sessionId);
 
     return session;
   }
 
-  addMessage(sessionId, role, content) {
-    const sessions = this._getUserSessions();
-    let session = sessions.get(sessionId);
+  async addMessage(sessionId, role, content) {
+    let session;
+
+    if (this.redisAvailable) {
+      session = await addMessageToSession(sessionId, role, content);
+    }
+
+    const localSessions = this._getUserLocalSessions();
+    session = localSessions.get(sessionId);
 
     if (!session) {
       session = {
@@ -72,7 +115,7 @@ class SessionManager {
         createdAt: new Date(),
         lastActivity: new Date()
       };
-      sessions.set(sessionId, session);
+      localSessions.set(sessionId, session);
     }
 
     const message = {
@@ -84,34 +127,59 @@ class SessionManager {
     session.messages.push(message);
     session.lastActivity = new Date();
 
-    this.saveSession(sessionId);
+    this.saveSessionToLocal(sessionId);
 
     return session;
   }
 
-  getSession(sessionId) {
-    const sessions = this._getUserSessions();
-    return sessions.get(sessionId);
-  }
-
-  getProjectSessions(projectPath) {
-    const sessions = this._getUserSessions();
-    const result = [];
-
-    for (const [id, session] of sessions) {
-      if (session.projectPath === projectPath) {
-        result.push({
-          id: session.id,
-          summary: this.getSessionSummary(session),
-          messageCount: session.messages.length,
-          lastActivity: session.lastActivity
+  async getSession(sessionId) {
+    if (this.redisAvailable) {
+      const redisSession = await getSessionFromRedis(sessionId);
+      if (redisSession) {
+        const localSessions = this._getUserLocalSessions();
+        localSessions.set(sessionId, {
+          ...redisSession,
+          createdAt: new Date(redisSession.createdAt),
+          lastActivity: new Date(redisSession.lastActivity),
+          messages: redisSession.messages.map(msg => ({
+            ...msg,
+            timestamp: new Date(msg.timestamp),
+          })),
         });
+        return localSessions.get(sessionId);
       }
     }
 
-    return result.sort((a, b) =>
-      new Date(b.lastActivity) - new Date(a.lastActivity)
-    );
+    const localSessions = this._getUserLocalSessions();
+    let session = localSessions.get(sessionId);
+
+    if (!session) {
+      session = await this.loadSessionFromLocal(sessionId);
+    }
+
+    return session;
+  }
+
+  async getProjectSessions(projectPath) {
+    let sessions = [];
+
+    if (this.redisAvailable) {
+      const userId = getCurrentUserHomeDir() || 'unknown';
+      sessions = await getUserSessionsFromRedis(userId);
+    } else {
+      const localSessions = this._getUserLocalSessions();
+      sessions = Array.from(localSessions.values());
+    }
+
+    return sessions
+      .filter(s => s.projectPath === projectPath)
+      .map(session => ({
+        id: session.id,
+        summary: this.getSessionSummary(session),
+        messageCount: session.messages.length,
+        lastActivity: session.lastActivity
+      }))
+      .sort((a, b) => new Date(b.lastActivity) - new Date(a.lastActivity));
   }
 
   getSessionSummary(session) {
@@ -129,8 +197,8 @@ class SessionManager {
   }
 
   buildConversationContext(sessionId, maxMessages = 10) {
-    const sessions = this._getUserSessions();
-    const session = sessions.get(sessionId);
+    const localSessions = this._getUserLocalSessions();
+    const session = localSessions.get(sessionId);
 
     if (!session || session.messages.length === 0) {
       return '';
@@ -158,9 +226,9 @@ class SessionManager {
     return path.join(this._getSessionsDir(), `${safeId}.json`);
   }
 
-  async saveSession(sessionId) {
-    const sessions = this._getUserSessions();
-    const session = sessions.get(sessionId);
+  async saveSessionToLocal(sessionId) {
+    const localSessions = this._getUserLocalSessions();
+    const session = localSessions.get(sessionId);
     if (!session) return;
 
     try {
@@ -168,16 +236,12 @@ class SessionManager {
       const filePath = this._safeFilePath(sessionId);
       await fs.writeFile(filePath, JSON.stringify(session, null, 2));
     } catch (error) {
-      // console.error('Error saving session:', error);
     }
   }
 
-  async loadSession(sessionId) {
-    const sessions = this._getUserSessions();
-    if (sessions.has(sessionId)) {
-      return sessions.get(sessionId);
-    }
-
+  async loadSessionFromLocal(sessionId) {
+    const localSessions = this._getUserLocalSessions();
+    
     try {
       const filePath = this._safeFilePath(sessionId);
       const data = await fs.readFile(filePath, 'utf8');
@@ -189,7 +253,7 @@ class SessionManager {
         msg.timestamp = new Date(msg.timestamp);
       });
 
-      sessions.set(session.id, session);
+      localSessions.set(session.id, session);
       return session;
     } catch (error) {
       return null;
@@ -197,20 +261,25 @@ class SessionManager {
   }
 
   async deleteSession(sessionId) {
-    const sessions = this._getUserSessions();
-    sessions.delete(sessionId);
+    const userId = getCurrentUserHomeDir() || 'unknown';
+
+    if (this.redisAvailable) {
+      await deleteSessionFromRedis(sessionId, userId);
+    }
+
+    const localSessions = this._getUserLocalSessions();
+    localSessions.delete(sessionId);
 
     try {
       const filePath = this._safeFilePath(sessionId);
       await fs.unlink(filePath);
     } catch (error) {
-      // console.error('Error deleting session file:', error);
     }
   }
 
   getSessionMessages(sessionId) {
-    const sessions = this._getUserSessions();
-    const session = sessions.get(sessionId);
+    const localSessions = this._getUserLocalSessions();
+    const session = localSessions.get(sessionId);
     if (!session) return [];
 
     return session.messages.map(msg => ({
@@ -221,6 +290,18 @@ class SessionManager {
       },
       timestamp: msg.timestamp.toISOString()
     }));
+  }
+
+  async touchSession(sessionId) {
+    if (this.redisAvailable) {
+      await updateSessionActivity(sessionId);
+    }
+
+    const localSessions = this._getUserLocalSessions();
+    const session = localSessions.get(sessionId);
+    if (session) {
+      session.lastActivity = new Date();
+    }
   }
 }
 
